@@ -35,8 +35,7 @@ export function ClimateCropHero() {
             id="hero-title"
             className="mt-6 max-w-3xl font-heading text-4xl leading-[1.03] font-extrabold tracking-[-0.065em] text-white sm:text-6xl lg:text-7xl"
           >
-            Smart Agriculture for a{" "}
-            <span className="text-emerald-300">Greener Future</span>
+            Smart Agriculture for a <span className="">Greener Future</span>
           </h1>
           <p className="mt-6 max-w-2xl text-base leading-7 text-white/85 sm:text-xl sm:leading-8">
             We help farmers and agricultural enterprises improve productivity

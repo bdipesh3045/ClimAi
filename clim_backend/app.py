@@ -13,5 +13,10 @@ def health():
     )
 
 
+@app.route("/api/crop-analysis", methods=["POST"])
+def crop_analysis():
+    return jsonify({"message": "Crop analysis endpoint"}), 200
+
+
 if __name__ == "__main__":
     app.run(debug=True, port=5000)
