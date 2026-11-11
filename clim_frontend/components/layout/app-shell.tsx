@@ -48,6 +48,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [mobileOpen, setMobileOpen] = useState(false)
+  const isAssistantPage = pathname === "/assistant"
 
   if (pathname === "/") {
     return <>{children}</>
@@ -55,7 +56,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
 
   const sidebar = (
     <div className="flex h-full flex-col px-4 py-6">
-      <Link href="/dashboard" className="mb-10 flex items-center gap-3 px-3" onClick={() => setMobileOpen(false)}>
+      <Link href="/" aria-label="ClimateAI home" className="mb-10 flex items-center gap-3 px-3" onClick={() => setMobileOpen(false)}>
         <span className="flex size-10 items-center justify-center rounded-2xl bg-[#17452d] text-white">
           <Leaf size={20} strokeWidth={1.8} aria-hidden="true" />
         </span>
@@ -134,7 +135,18 @@ function ShellContent({ children }: { children: React.ReactNode }) {
             Demo workspace
           </div>
         </header>
-        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1440px] px-4 py-7 focus:outline-none sm:px-7 sm:py-9 lg:px-10 lg:py-10">{children}</main>
+        <main
+          id="main-content"
+          tabIndex={-1}
+          className={cn(
+            "mx-auto w-full max-w-[1440px] px-4 focus:outline-none sm:px-7 lg:px-10",
+            isAssistantPage
+              ? "h-[calc(100dvh-74px)] overflow-hidden py-3 sm:py-4"
+              : "py-7 sm:py-9 lg:py-10",
+          )}
+        >
+          {children}
+        </main>
       </div>
     </div>
   )

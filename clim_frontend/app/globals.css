@@ -1,21 +1,21 @@
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
-@import 'tailwindcss';
-@import 'tw-animate-css';
-@import 'shadcn/tailwind.css';
+@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
 @theme inline {
-  --color-brand-cream: #F4F6F0;
-  --color-brand-sage: #E8ECE3;
-  --color-brand-card: #FFFFFF;
-  --color-brand-dark: #0F2617;
-  --color-brand-forest: #153E26;
-  --color-brand-accent: #22C55E;
-  --color-brand-subtle: #6B7A6E;
-  --color-brand-border: #E3E8DE;
-  --font-sans: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
-  --font-heading: 'Plus Jakarta Sans', ui-sans-serif, system-ui, sans-serif;
+  --color-brand-cream: #f4f6f0;
+  --color-brand-sage: #e8ece3;
+  --color-brand-card: #ffffff;
+  --color-brand-dark: #0f2617;
+  --color-brand-forest: #153e26;
+  --color-brand-accent: #22c55e;
+  --color-brand-subtle: #6b7a6e;
+  --color-brand-border: #e3e8de;
+  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  --font-heading: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -128,7 +128,6 @@
     color: #17452d;
   }
 }
-
 
 :root {
   color-scheme: light;

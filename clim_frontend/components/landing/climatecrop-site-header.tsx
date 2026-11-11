@@ -1,5 +1,5 @@
 import Link from "next/link"
-import { ArrowUpRight, Leaf, Menu, Sprout } from "lucide-react"
+import { ArrowUpRight, LayoutDashboard, Leaf, Menu, Sprout } from "lucide-react"
 
 const navigation = [
   { label: "Home", href: "#hero" },
@@ -40,6 +40,9 @@ export function ClimateCropSiteHeader() {
         </nav>
 
         <div className="hidden items-center lg:flex">
+          <Link href="/dashboard" className="mr-3 inline-flex min-h-10 items-center gap-2 rounded-full px-3 text-sm font-semibold text-brand-subtle transition-colors hover:text-brand-forest focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-forest">
+            <LayoutDashboard size={15} aria-hidden="true" /> Workspace
+          </Link>
           <Link href="#location-finder" className="inline-flex min-h-10 items-center gap-2 rounded-full bg-brand-forest px-5 text-sm font-semibold text-white transition-colors hover:bg-brand-dark focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-forest">
             Analyze Plot Free <ArrowUpRight size={15} aria-hidden="true" />
           </Link>
@@ -53,6 +56,9 @@ export function ClimateCropSiteHeader() {
             <NavigationLinks mobile />
             <Link href="#location-finder" className="mt-1 flex items-center justify-between rounded-lg bg-brand-forest px-3 py-2.5 text-sm font-semibold text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-forest">
               Analyze Plot Free <Leaf size={15} aria-hidden="true" />
+            </Link>
+            <Link href="/dashboard" className="flex items-center justify-between rounded-lg px-3 py-2.5 text-sm font-semibold text-brand-dark transition-colors hover:bg-brand-cream focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-forest">
+              Open Workspace <LayoutDashboard size={15} aria-hidden="true" />
             </Link>
           </nav>
         </details>
