@@ -152,13 +152,17 @@ The frontend will run at:
 
 ### Crop Finder API
 
-Set `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` in `clim_frontend/.env.local` to the backend URL that accepts the Crop Finder form's `POST` request. The backend must allow requests from the frontend origin when hosted on a different port or domain.
+Set `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` in `clim_frontend/.env.local` to `http://127.0.0.1:5000/api/crop-analysis` for local development. The Flask endpoint prints the received JSON in the backend terminal and returns it in the response. The backend must allow requests from the frontend origin when hosted on a different port or domain.
 
 The request body is JSON with this shape:
 
 ```json
 {
   "location": "Klaten Regency, Central Java, Indonesia",
+  "coordinates": {
+    "lat": -7.7058,
+    "lon": 110.6064
+  },
   "farm": {
     "size": 24.5,
     "sizeUnit": "acres",
