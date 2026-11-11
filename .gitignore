@@ -38,3 +38,11 @@ Thumbs.db
 
 # remove venv
 venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+
+# Local tooling state
+.freebuff/
+.cloud-attachments/

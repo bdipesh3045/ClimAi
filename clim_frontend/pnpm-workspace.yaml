@@ -3,3 +3,8 @@ pmOnFail: ignore
 minimumReleaseAgeExclude:
   - '@next/*'
   - next
+
+# @openuidev/lang-core's postinstall only reports anonymous telemetry, so it is
+# denied rather than allow-listed.
+allowBuilds:
+  '@openuidev/lang-core': false

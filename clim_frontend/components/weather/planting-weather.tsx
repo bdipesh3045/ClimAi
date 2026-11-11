@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react"
 import { ArrowLeft, ArrowRight, CalendarDays, Cloud, CloudRain, CloudSun, Droplets, Sun, ThermometerSun } from "lucide-react"
 import { PageIntro } from "@/components/shared/page-intro"
+import { PlantingBrief } from "@/components/weather/planting-brief"
 import { useAppData } from "@/components/providers/app-data-provider"
 import { plantingWindows } from "@/lib/demo-data"
 import { demoClimateService } from "@/lib/climate-service"
@@ -18,6 +19,13 @@ const crops = [
 ]
 const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
+/** Demo data stores icon keys; the brief and tables should show words. */
+function skyLabel(icon: string): string {
+  if (icon === "rain") return "Rain"
+  if (icon === "sun") return "Sunny"
+  return "Sun and cloud"
+}
+
 export function PlantingWeather() {
   const { location } = useAppData()
   const snapshot = demoClimateService.getDashboardSnapshot(location)
@@ -32,6 +40,60 @@ export function PlantingWeather() {
   const windowStatus = inWindow ? "Inside the typical window" : todayMonth < window.start ? "Before the typical window" : "After the typical window"
   const cropTimeline = useMemo(() => months.map((month, index) => ({ month, active: index >= window.start && index <= window.end })), [window])
 
+  // Everything the generated brief may show, copied from the values rendered
+  // below. It carries its own provenance so the model cannot dress simulated
+  // numbers up as a live forecast.
+  const briefContext = useMemo(
+    () => ({
+      location,
+      crop: selectedCrop,
+      year,
+      typicalWindow: {
+        startMonth: months[window.start],
+        endMonth: months[window.end],
+        months: months.filter((_, index) => index >= window.start && index <= window.end),
+        note: window.note,
+        status: windowStatus,
+      },
+      calendar: months.map((month, index) => ({
+        month,
+        inTypicalWindow: index >= window.start && index <= window.end,
+      })),
+      currentConditions: {
+        temperatureF: snapshot.temperatureF,
+        conditions: snapshot.conditions,
+        recentRainfallInches: snapshot.recentRainfallInches,
+        provenance: "simulated demo values",
+      },
+      sevenDayOutlook: forecastDays.map((day) => ({
+        day: day.day,
+        highF: day.high,
+        lowF: day.low,
+        rainChancePct: day.rain,
+        sky: skyLabel(day.icon),
+      })),
+      alerts: activeAlerts.map((alert) => ({
+        severity: alert.severity,
+        title: alert.title,
+        description: alert.description,
+      })),
+      disclaimer:
+        "Simulated demonstration data. No live weather provider or alert feed is connected, so these values must not guide field decisions.",
+    }),
+    [
+      location,
+      selectedCrop,
+      year,
+      window,
+      windowStatus,
+      snapshot.temperatureF,
+      snapshot.conditions,
+      snapshot.recentRainfallInches,
+      forecastDays,
+      activeAlerts,
+    ],
+  )
+
   return (
     <div>
       <PageIntro eyebrow="Plan with the season" title="Know when to plant. Stay ahead of weather." description="Use an at-a-glance planting calendar and forecast-style preview to plan what to check next. Live forecasts and alerts are not connected in this demo." />
@@ -43,6 +105,13 @@ export function PlantingWeather() {
           <div className="flex flex-col gap-1.5"><span className="text-[11px] font-semibold text-[#637064]">Season year</span><div className="flex h-8 items-center justify-between gap-4 rounded-lg border border-[#e7ebe5] px-2"><Button type="button" variant="ghost" size="icon-sm" aria-label="Previous year" onClick={() => setYear((value) => value - 1)}><ArrowLeft /></Button><span className="text-xs font-semibold">{year} · illustrative</span><Button type="button" variant="ghost" size="icon-sm" aria-label="Next year" onClick={() => setYear((value) => value + 1)}><ArrowRight /></Button></div></div>
         </div>
       </section>
+
+      <div className="mb-7">
+        <PlantingBrief
+          key={`${location}-${crop}-${year}`}
+          context={briefContext}
+        />
+      </div>
 
       <section className="grid gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(280px,0.65fr)]">
         <div className="rounded-2xl border border-[#e7ebe5] bg-white p-5 sm:p-7">
