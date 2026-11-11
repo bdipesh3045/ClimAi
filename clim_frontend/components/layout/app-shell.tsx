@@ -1,0 +1,141 @@
+"use client"
+
+import { useState } from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
+import {
+  ArrowUpRight,
+  ChartNoAxesCombined,
+  CloudSun,
+  Leaf,
+  ListChecks,
+  Menu,
+  MessageCircle,
+  Sprout,
+  Wheat,
+  X,
+} from "lucide-react"
+import { AppDataProvider } from "@/components/providers/app-data-provider"
+import { Button } from "@/components/ui/button"
+import { cn } from "@/lib/utils"
+
+const navigation = [
+  { title: "Overview", href: "/dashboard", icon: ChartNoAxesCombined },
+  { title: "Crop Finder", href: "/crop-finder", icon: Sprout },
+  { title: "Season Comparison", href: "/season-comparison", icon: Wheat },
+  { title: "Improvement Plan", href: "/improvement-plan", icon: ListChecks },
+  { title: "Planting & Weather", href: "/planting-weather", icon: CloudSun },
+  { title: "AI Assistant", href: "/assistant", icon: MessageCircle },
+]
+
+const pageTitles: Record<string, string> = {
+  "/dashboard": "Overview",
+  "/crop-finder": "Crop Finder",
+  "/season-comparison": "Season Comparison",
+  "/improvement-plan": "Improvement Plan",
+  "/planting-weather": "Planting & Weather",
+  "/assistant": "AI Assistant",
+}
+
+export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <AppDataProvider>
+      <ShellContent>{children}</ShellContent>
+    </AppDataProvider>
+  )
+}
+
+function ShellContent({ children }: { children: React.ReactNode }) {
+  const pathname = usePathname()
+  const [mobileOpen, setMobileOpen] = useState(false)
+
+  if (pathname === "/") {
+    return <>{children}</>
+  }
+
+  const sidebar = (
+    <div className="flex h-full flex-col px-4 py-6">
+      <Link href="/dashboard" className="mb-10 flex items-center gap-3 px-3" onClick={() => setMobileOpen(false)}>
+        <span className="flex size-10 items-center justify-center rounded-2xl bg-[#17452d] text-white">
+          <Leaf size={20} strokeWidth={1.8} aria-hidden="true" />
+        </span>
+        <span className="font-heading text-[19px] font-extrabold tracking-[-0.04em] text-[#17452d]">Climate<span className="text-[#398253]">AI</span></span>
+      </Link>
+
+      <p className="px-3 pb-3 text-[10px] font-bold tracking-[0.17em] text-[#9aa39a] uppercase">Your workspace</p>
+      <nav aria-label="Main navigation" className="flex flex-col gap-1">
+        {navigation.map(({ title, href, icon: Icon }) => {
+          const isActive = pathname === href
+          return (
+            <Link
+              key={href}
+              href={href}
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => setMobileOpen(false)}
+              className={cn(
+                "group flex min-h-11 items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-[#398253] focus-visible:ring-offset-2",
+                isActive
+                  ? "bg-[#eaf1e8] text-[#17452d]"
+                  : "text-[#69726a] hover:bg-[#f1f6ed] hover:text-[#17452d]",
+              )}
+            >
+              <Icon size={17} strokeWidth={1.8} aria-hidden="true" />
+              {title}
+              {isActive && <span className="ml-auto size-1.5 rounded-full bg-[#398253]" aria-hidden="true" />}
+            </Link>
+          )
+        })}
+      </nav>
+
+      <div className="mt-auto rounded-2xl border border-[#e4eae1] bg-[#f7faf4] p-4">
+        <span className="mb-3 flex size-8 items-center justify-center rounded-xl bg-white text-[#398253]">
+          <Sprout size={16} aria-hidden="true" />
+        </span>
+        <p className="text-xs font-semibold text-[#27362a]">A clearer growing season</p>
+        <p className="mt-1 text-[11px] leading-5 text-[#7b857b]">Bring climate context and your own field notes together.</p>
+        <Link href="/improvement-plan" className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[#23603b] hover:underline">
+          View your plan <ArrowUpRight size={13} aria-hidden="true" />
+        </Link>
+      </div>
+      <p className="px-3 pt-5 text-[10px] text-[#9aa39a]">ClimateAI · TechXpo 2026</p>
+    </div>
+  )
+
+  return (
+    <div className="min-h-screen bg-[#f8faf6] text-[#202720] lg:flex">
+      <a href="#main-content" className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#17452d] focus:shadow-lg">Skip to main content</a>
+      <aside className="hidden w-[252px] shrink-0 border-r border-[#e7ebe5] bg-[#fcfcf8] lg:sticky lg:top-0 lg:flex lg:h-screen">{sidebar}</aside>
+
+      {mobileOpen && (
+        <>
+          <button type="button" aria-label="Close navigation" className="fixed inset-0 z-40 bg-[#10291b]/35 lg:hidden" onClick={() => setMobileOpen(false)} />
+          <aside className="fixed inset-y-0 left-0 z-50 w-[min(82vw,300px)] border-r border-[#e7ebe5] bg-[#fcfcf8] shadow-xl lg:hidden">
+            <div className="absolute top-5 right-4">
+              <Button variant="ghost" size="icon" aria-label="Close menu" onClick={() => setMobileOpen(false)}><X /></Button>
+            </div>
+            {sidebar}
+          </aside>
+        </>
+      )}
+
+      <div className="min-w-0 flex-1">
+        <header className="sticky top-0 z-30 flex h-[74px] items-center justify-between border-b border-[#e7ebe5] bg-[#fcfcf8]/95 px-4 backdrop-blur-sm sm:px-7 lg:px-10">
+          <div className="flex items-center gap-3">
+            <Button variant="ghost" size="icon" className="lg:hidden" aria-label="Open navigation" aria-expanded={mobileOpen} onClick={() => setMobileOpen(true)}>
+              <Menu />
+            </Button>
+            <div>
+              <p className="hidden text-[10px] font-semibold tracking-[0.15em] text-[#869087] uppercase sm:block">Climate intelligence</p>
+              <p className="mt-0.5 text-sm font-semibold text-[#28352b]">{pageTitles[pathname] ?? "ClimateAI"}</p>
+            </div>
+          </div>
+          <div className="hidden items-center gap-2 text-[11px] text-[#858d85] sm:flex">
+            <span className="size-1.5 rounded-full bg-[#a8c5a5]" aria-hidden="true" />
+            Demo workspace
+          </div>
+        </header>
+        <main id="main-content" tabIndex={-1} className="mx-auto w-full max-w-[1440px] px-4 py-7 focus:outline-none sm:px-7 sm:py-9 lg:px-10 lg:py-10">{children}</main>
+      </div>
+    </div>
+  )
+}
