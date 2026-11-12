@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { APICallError, DefaultChatTransport, type UIMessage } from "ai";
 import { ArrowUp, LoaderCircle, MessageCircle, Sprout } from "lucide-react";
-import { useAppData } from "@/components/providers/app-data-provider";
+import { useAuth } from "@/components/providers/auth-provider";
+import type { FarmerProfile } from "@/lib/session";
+import { ASSISTANT_ERRORS, isAssistantErrorMessage } from "@/lib/assistant-errors";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Marker, MarkerContent } from "@/components/ui/marker";
@@ -25,27 +28,74 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 
+// The server adds the farmer's saved profile to the prompt, so "my farm" needs no templating.
 const suggestedQuestions = [
-  "Why might rice suit my location?",
-  "What changed between the sample seasons?",
-  "What should I check before planting?",
-  "How could rainfall affect my crop?",
+  "Which crops suit my farm best?",
+  "When should I plant my current crops?",
+  "How does my soil type affect what I can grow?",
+  "How should I manage water on my farm?",
+  "What weather risks should I watch for in my area?",
 ];
 
+// Odd, so the slice starts on a user question. Must stay under the route's MAX_MESSAGES.
+const MAX_SENT_MESSAGES = 11;
+
+// Send only the latest messages so a long chat keeps working within the route's limits.
+const transport = new DefaultChatTransport({
+  api: "/api/assistant",
+  prepareSendMessagesRequest: ({ messages }) => ({
+    body: { messages: messages.slice(-MAX_SENT_MESSAGES) },
+  }),
+});
+
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+function chatErrorMessage(error: Error): string {
+  if (isAssistantErrorMessage(error.message)) return error.message;
+  if (APICallError.isInstance(error)) {
+    if (error.statusCode === HTTP_UNAUTHORIZED) {
+      return "Your sign-in has ended. Sign in again to use the assistant.";
+    }
+    if (error.statusCode === HTTP_TOO_MANY_REQUESTS) {
+      return "You have sent a lot of questions. Please wait a few minutes and try again.";
+    }
+  }
+  return ASSISTANT_ERRORS.connection;
+}
+
+const NO_ANSWER_MESSAGE = ASSISTANT_ERRORS.empty;
+
+function messageText(message: UIMessage): string {
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+}
+
+function profileLabel(profile: FarmerProfile | null, isMissing: boolean): string {
+  if (profile !== null) {
+    return `Using your profile: ${profile.farmName ?? "your farm"} · ${profile.location}`;
+  }
+  return isMissing ? "No farm profile saved yet" : "Loading your profile…";
+}
+
 export function ClimateChat() {
-  const { location } = useAppData();
+  const { state } = useAuth();
+  const profile = state.status === "signed-in" ? state.account.profile : null;
+  // Only true once sign-in has resolved, so the "add profile" prompt does not flash while loading.
+  const isProfileMissing = state.status === "signed-in" && profile === null;
   const [input, setInput] = useState("");
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/assistant",
-        body: () => ({ location }),
-      }),
-    [location],
-  );
   const { messages, sendMessage, status, error, stop, regenerate, clearError } =
     useChat({ transport });
   const isBusy = status === "submitted" || status === "streaming";
+  const lastMessage = messages.at(-1);
+  // A failed or timed-out answer can end with no text and no error. Treat it as a failure too,
+  // so the farmer sees "Try again" instead of a silent empty chat.
+  const isUnanswered =
+    status === "ready" &&
+    lastMessage !== undefined &&
+    (lastMessage.role === "user" || messageText(lastMessage).trim() === "");
 
   function submitQuestion(question = input) {
     const trimmed = question.trim();
@@ -88,7 +138,7 @@ export function ClimateChat() {
             <div>
               <p className="text-xs font-semibold">ClimateAI assistant</p>
               <p className="mt-0.5 text-[10px] text-[#899289]">
-                Context: {location} · demo data
+                {profileLabel(profile, isProfileMissing)}
               </p>
             </div>
           </div>
@@ -104,10 +154,21 @@ export function ClimateChat() {
                 What would you like to understand?
               </h2>
               <p className="mt-2 max-w-md text-xs leading-5 text-[#7b857b]">
-                Ask a question about the demonstration data, or start with one
-                of these prompts. The assistant will identify missing context
-                instead of guessing.
+                Ask about your farm, or start with one of these questions. The
+                assistant uses your saved profile and says when something is
+                missing instead of guessing.
               </p>
+              {isProfileMissing && (
+                <p className="mt-3 text-xs text-[#7b857b]">
+                  <Link
+                    href="/profile"
+                    className="font-semibold text-[#286540] underline underline-offset-2"
+                  >
+                    Add your farm profile
+                  </Link>{" "}
+                  for answers about your own land.
+                </p>
+              )}
               <div className="mt-6 flex max-w-2xl flex-wrap justify-center gap-2">
                 {suggestedQuestions.map((question) => (
                   <button
@@ -127,11 +188,11 @@ export function ClimateChat() {
                 <MessageScrollerViewport aria-label="Conversation messages">
                   <MessageScrollerContent className="gap-5 px-4 py-5 sm:px-6">
                     {messages.map((message, messageIndex) => {
-                      const text = message.parts
-                        .filter((part) => part.type === "text")
-                        .map((part) => part.text)
-                        .join("");
+                      const text = messageText(message);
                       const isUser = message.role === "user";
+                      // An answer with no text yet (or a failed one) shows as the
+                      // "Thinking" row or the error banner, not an empty bubble.
+                      if (!isUser && text.trim() === "") return null;
                       return (
                         <MessageScrollerItem
                           key={message.id}
@@ -157,14 +218,16 @@ export function ClimateChat() {
                                 variant={isUser ? "default" : "secondary"}
                                 className="max-w-full"
                               >
-                                <BubbleContent className="px-4 py-3 text-xs leading-6">
+                                <BubbleContent className="whitespace-pre-line px-4 py-3 text-xs leading-6">
                                   {text}
                                 </BubbleContent>
                               </Bubble>
                               {!isUser && (
                                 <MessageFooter className="px-1 pt-1 text-[9px]">
-                                  Based on the available demo context · not
-                                  field advice
+                                  {profile === null
+                                    ? "General guidance"
+                                    : "Based on your farm profile"}{" "}
+                                  · not field advice
                                 </MessageFooter>
                               )}
                             </MessageContent>
@@ -203,14 +266,13 @@ export function ClimateChat() {
           )}
         </div>
 
-        {error && (
+        {(error || isUnanswered) && (
           <div
             className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#edd8d3] bg-[#fbf4f2] px-4 py-3 sm:mx-5"
             role="alert"
           >
             <p className="text-xs leading-5 text-[#87594c]">
-              The assistant could not connect. Please try again; no answer was
-              invented.
+              {error ? chatErrorMessage(error) : NO_ANSWER_MESSAGE}
             </p>
             <Button
               type="button"
@@ -269,8 +331,7 @@ export function ClimateChat() {
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1">
             <Marker className="text-[9px]">
               <MarkerContent>
-                Demonstration data only · no live weather or soil source
-                connected
+                Uses your saved farm profile · no live weather or soil feed
               </MarkerContent>
             </Marker>
             <span className="text-[9px] text-[#9aa39a]">
