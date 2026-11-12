@@ -35,7 +35,7 @@ import { PageIntro } from "@/components/shared/page-intro";
 // ---------------------------------------------------------------------------
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:5000";
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:5001"; // 5000 is taken by macOS AirPlay Receiver
 
 const MONTHS = [
   "Jan",

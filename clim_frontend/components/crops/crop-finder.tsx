@@ -1,7 +1,10 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import { useRouter } from "next/navigation";
 import { ChevronDown, MapPin, Search, Sprout } from "lucide-react";
+
+import { parseCropAnalysis, saveCropAnalysis } from "@/lib/crop-analysis";
 
 type GeoResult = {
   display_name: string;
@@ -209,6 +212,7 @@ function SectionShell({
 }
 
 export function CropFinder() {
+  const router = useRouter();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [locationQuery, setLocationQuery] = useState("");
   const [geoResults, setGeoResults] = useState<GeoResult[]>([]);
@@ -224,7 +228,6 @@ export function CropFinder() {
     status: "idle",
     message: "",
   });
-  const [result, setResult] = useState<unknown>();
 
   async function searchLocation() {
     const q = locationQuery.trim();
@@ -308,7 +311,6 @@ export function CropFinder() {
 
     setIsSubmitting(true);
     setSubmission({ status: "idle", message: "" });
-    setResult(undefined);
 
     const endpoint = process.env.NEXT_PUBLIC_CROP_ANALYSIS_API_URL;
     if (!endpoint) {
@@ -351,17 +353,10 @@ export function CropFinder() {
       }
 
       const responseData: unknown = await response.json();
-      setResult(responseData);
-      setSubmission({
-        status: "success",
-        message: "Farm assessment submitted successfully.",
-      });
-      form.reset();
-      setLocationQuery("");
-      setSelectedLocation(null);
-      setGeoResults([]);
-      setGeoStatus("idle");
-      setIrrigationAvailable("");
+      parseCropAnalysis(responseData); // throws a readable error before we leave the form
+      saveCropAnalysis(responseData);
+      setSubmission({ status: "success", message: "Opening your crop results..." });
+      router.push("/crop-finder/results");
     } catch (error) {
       const message =
         error instanceof Error && error.name === "AbortError"
@@ -392,8 +387,8 @@ export function CropFinder() {
         Find crops suited to your conditions.
       </h1>
       <p className="mt-3 max-w-[760px] text-[15px] leading-7 text-[#5d6a60]">
-        Enter your growing conditions, then send the assessment to your
-        configured backend for analysis.
+        Enter your farm details. We match your local 30-year climate and
+        soil against 30 crops and rank the best fits.
       </p>
 
       <form onSubmit={handleSubmit} className="space-y-4">
@@ -805,24 +800,6 @@ export function CropFinder() {
           </p>
         )}
       </form>
-
-      {result !== undefined && (
-        <section
-          aria-labelledby="crop-analysis-result-heading"
-          className="rounded-[22px] border border-[#dfe8df] bg-[#f8faf6] p-4 sm:p-5"
-        >
-          <h2
-            id="crop-analysis-result-heading"
-            className="text-[14px] font-bold text-[#1f3624]"
-          >
-            Assessment response
-          </h2>
-          {/* TODO: Replace the raw response with the designed crop results UI. */}
-          <pre className="mt-3 overflow-x-auto rounded-[14px] border border-[#dfe8df] bg-white p-3 text-[12px] leading-5 text-[#35463a]">
-            {JSON.stringify(result, null, 2)}
-          </pre>
-        </section>
-      )}
 
       <footer className="mt-5 flex flex-col items-center justify-between gap-3 border-t border-[#dfe8df] pt-3 text-[12px] text-[#7a857f] sm:flex-row">
         <div className="flex items-center gap-2">

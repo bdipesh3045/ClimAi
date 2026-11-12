@@ -133,7 +133,7 @@ python app.py
 
 The Flask backend will run at:
 
-`http://127.0.0.1:5000`
+`http://127.0.0.1:5001`
 
 ### 3. Run the Frontend
 
@@ -152,7 +152,62 @@ The frontend will run at:
 
 ### Crop Finder API
 
-Set `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` in `clim_frontend/.env.local` to `http://127.0.0.1:5000/api/crop-analysis` for local development. The Flask endpoint prints the received JSON in the backend terminal and returns it in the response. The backend must allow requests from the frontend origin when hosted on a different port or domain.
+Set `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` in `clim_frontend/.env.local` to `http://127.0.0.1:5001/api/crop-analysis` for local development. The Flask endpoint looks up the 30-year monthly climate for the coordinates from NASA POWER, scores every crop in `clim_backend/crops.json` with `crop_suitability.py`, and returns the crops ranked best first. The backend must allow requests from the frontend origin when hosted on a different port or domain.
+
+The response looks like this (one entry per crop, best first):
+
+```json
+{
+  "message": "Crop recommendations ready.",
+  "location": "Monroe, Louisiana",
+  "farm": {
+    "acres": 24.5,
+    "irrigated": false,
+    "soil_type": "loam"
+  },
+  "climate": {
+    "source": "NASA POWER 30-year monthly climatology",
+    "monthly_temp_c": [7.03, 9.16, "... 12 values, January first"],
+    "monthly_rain_mm": [122.1, 133.6, "... 12 values, January first"]
+  },
+  "recommendations": [
+    {
+      "crop": "Soybean",
+      "emoji": "🫛",
+      "category": "legume",
+      "season_days": 120,
+      "needs": {
+        "temp_c": [20, 33],
+        "temp_limit_c": [10, 38],
+        "rain_mm": [600, 1500],
+        "rain_limit_mm": [450, 1800],
+        "ph": [5.5, 6.5],
+        "soil_types": ["loam", "silt loam", "clay loam"]
+      },
+      "score": 100,
+      "level": "Great fit",
+      "main_limit": "warmth",
+      "factors": {
+        "soil type": 1.0,
+        "warmth": 1.0,
+        "water": 1.0
+      },
+      "plant_month": "March",
+      "harvest_month": "July",
+      "season_temp_c": 20.7,
+      "yearly_rain_mm": 1411,
+      "season_rain_mm": 478,
+      "dry_season": false,
+      "harvest_lb_per_acre": 3000,
+      "harvest_lb_total": 73500,
+      "harvest_what": "beans",
+      "missing": ["soil pH"]
+    }
+  ]
+}
+```
+
+`level` is `Great fit` (80+), `Good fit` (60+), `Possible with care` (40+) or `Not recommended`. Harvest numbers are `null` for crops scoring under 40. `needs` holds the crop's ideal (`temp_c`, `rain_mm`, `ph`) and survival (`*_limit_*`) ranges from `crops.json`, in deg C and mm. `farm` echoes the inputs the scorer used. The Crop Finder page saves the response in `sessionStorage` and shows it on `/crop-finder/results`. Invalid input returns `400` and a failed climate lookup returns `502`, both as `{"error": "..."}`. Run the backend tests with `python -m unittest test_app` from `clim_backend`.
 
 The request body is JSON with this shape:
 
