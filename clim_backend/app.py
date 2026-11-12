@@ -1,19 +1,51 @@
 import http.client
 import json
 import math
+import os
 import urllib.request
+from datetime import timedelta
 from functools import lru_cache
+from pathlib import Path
 
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
+import accounts
 from crop_suitability import recommend_crops
 from services import season
 from services.crops import catalog_source, search_crops
+from db import close_db
+from validation import SOIL_TEXTURES, in_range, parse_coordinates, parse_farm_size, parse_soil  # noqa: F401
+
+MIN_SECRET_KEY_LENGTH = 32
+SECRET_KEY = os.environ.get("CLIMAI_SECRET_KEY", "")
+if len(SECRET_KEY) < MIN_SECRET_KEY_LENGTH:
+    raise RuntimeError(
+        f"Set CLIMAI_SECRET_KEY to a random value of at least {MIN_SECRET_KEY_LENGTH} characters, for example:\n"
+        "  export CLIMAI_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')"
+    )
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 64 * 1024  # the form payload is about 1 KB
-CORS(app)
+app.config.update(
+    MAX_CONTENT_LENGTH=64 * 1024,  # the largest form payload is about 2 KB
+    SECRET_KEY=SECRET_KEY,
+    SESSION_COOKIE_HTTPONLY=True,
+    SESSION_COOKIE_SAMESITE="Lax",
+    SESSION_COOKIE_SECURE=True,  # turned off for the local http dev server at the bottom of this file
+    PERMANENT_SESSION_LIFETIME=timedelta(days=30),
+    DATABASE=os.environ.get("CLIMAI_DB_PATH", str(Path(__file__).with_name("climai.db"))),
+)
+# The pages call these routes directly from the browser. Account routes are reached through
+# the Next.js /backend proxy (same origin), so they get no CORS headers.
+CORS(app, resources={
+    r"/api/crop-analysis": {},
+    r"/api/health": {},
+    r"/api/locations/search": {},
+    r"/api/crops/search": {},
+    r"/api/season/compare": {},
+})
+app.register_blueprint(accounts.bp)
+app.teardown_appcontext(close_db)
 
 # NASA POWER 30-year climatology: mean temperature (deg C) and rainfall (mm per day) for each month.
 NASA_POWER_URL = (
@@ -25,21 +57,10 @@ NASA_FILL_VALUE = -999
 MONTH_KEYS = ["JAN", "FEB", "MAR", "APR", "MAY", "JUN", "JUL", "AUG", "SEP", "OCT", "NOV", "DEC"]
 DAYS_IN_MONTH = [31, 28.25, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31]
 ACRES_PER_HECTARE = 2.47105
-FARM_SIZE_UNITS = ("acres", "hectares")
-MIN_FARM_SIZE = 0.01  # same minimum as the form
-MAX_FARM_SIZE = 10_000_000  # far above any real farm, keeps harvest math finite
-# Soil choices on the Crop Finder form, mapped to the textures crops.json uses.
-SOIL_TEXTURES = {"Clay": "clay", "Silt": "silt loam", "Loam": "loam", "Sandy": "sandy loam", "Not sure": None}
 
 
 class ClimateUnavailable(Exception):
     """NASA POWER could not give usable climate data for a location."""
-
-
-def in_range(value, low, high):
-    """True for a real number from low to high. Compares without converting to float, so a
-    400-digit JSON integer cannot overflow, and NaN or Infinity fail the comparison."""
-    return isinstance(value, (int, float)) and not isinstance(value, bool) and low <= value <= high
 
 
 # ponytail: no rate limit, so a caller looping over coordinates can make many NASA calls.
@@ -64,22 +85,9 @@ def fetch_monthly_climate(lat, lon):
 
 def parse_farm(payload):
     """Pull what the scorer needs from the Crop Finder payload. Raises ValueError with a message for the user."""
-    coords = payload.get("coordinates")
-    lat = coords.get("lat") if isinstance(coords, dict) else None
-    lon = coords.get("lon") if isinstance(coords, dict) else None
-    if not (in_range(lat, -90, 90) and in_range(lon, -180, 180)):
-        raise ValueError("Pick your farm location from the search results (coordinates are missing or invalid).")
-
-    soil = payload.get("soilType")
-    if soil is not None and (not isinstance(soil, str) or soil not in SOIL_TEXTURES):
-        raise ValueError(f"soilType must be one of: {', '.join(SOIL_TEXTURES)}.")
-
-    farm = payload.get("farm") if isinstance(payload.get("farm"), dict) else {}
-    size, unit = farm.get("size"), farm.get("sizeUnit", "acres")
-    if size is not None and not in_range(size, MIN_FARM_SIZE, MAX_FARM_SIZE):
-        raise ValueError(f"Farm size must be a number from {MIN_FARM_SIZE} to {MAX_FARM_SIZE:,}.")
-    if unit not in FARM_SIZE_UNITS:
-        raise ValueError("Farm size unit must be acres or hectares.")
+    lat, lon = parse_coordinates(payload)
+    soil = parse_soil(payload)
+    size, unit = parse_farm_size(payload)
     acres = None if size is None else size * (ACRES_PER_HECTARE if unit == "hectares" else 1)
 
     irrigation = payload.get("irrigation")
@@ -239,4 +247,5 @@ def season_compare():
 
 
 if __name__ == "__main__":
+    app.config["SESSION_COOKIE_SECURE"] = False  # the dev server is plain http; Safari drops Secure cookies there
     app.run(debug=True, port=5001)  # not 5000: macOS AirPlay Receiver already listens there

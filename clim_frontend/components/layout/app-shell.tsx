@@ -1,23 +1,35 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 import {
   ArrowUpRight,
   ChartNoAxesCombined,
   CloudSun,
   Leaf,
   ListChecks,
+  LoaderCircle,
+  LogOut,
   Menu,
   MessageCircle,
   Sprout,
+  UserRound,
   Wheat,
   X,
 } from "lucide-react";
 import { AppDataProvider } from "@/components/providers/app-data-provider";
+import {
+  AuthProvider,
+  useAuth,
+  type AuthState,
+} from "@/components/providers/auth-provider";
 import { Button } from "@/components/ui/button";
+import { errorText } from "@/lib/api";
 import { cn } from "@/lib/utils";
+
+// Drawn without the app sidebar and open to guests. Every other page needs a signed-in farmer.
+const PUBLIC_PATHS = new Set(["/", "/login", "/signup"]);
 
 const navigation = [
   { title: "Overview", href: "/dashboard", icon: ChartNoAxesCombined },
@@ -26,6 +38,7 @@ const navigation = [
   { title: "Improvement Plan", href: "/improvement-plan", icon: ListChecks },
   { title: "Planting & Weather", href: "/planting-weather", icon: CloudSun },
   { title: "AI Assistant", href: "/assistant", icon: MessageCircle },
+  { title: "Farm Profile", href: "/profile", icon: UserRound },
 ];
 
 const pageTitles: Record<string, string> = {
@@ -36,24 +49,41 @@ const pageTitles: Record<string, string> = {
   "/improvement-plan": "Improvement Plan",
   "/planting-weather": "Planting & Weather",
   "/assistant": "AI Assistant",
+  "/profile": "Farm Profile",
 };
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <AppDataProvider>
-      <ShellContent>{children}</ShellContent>
-    </AppDataProvider>
+    <AuthProvider>
+      <AppDataProvider>
+        <ShellContent>{children}</ShellContent>
+      </AppDataProvider>
+    </AuthProvider>
   );
 }
 
 function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
+  const router = useRouter();
+  const { state } = useAuth();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAssistantPage = pathname === "/assistant";
+  const isPublicPage = PUBLIC_PATHS.has(pathname);
 
-  if (pathname === "/") {
+  // A guest who opens an app page signs in first, then comes back to it.
+  useEffect(() => {
+    if (!isPublicPage && state.status === "guest") {
+      router.replace(`/login?next=${encodeURIComponent(pathname)}`);
+    }
+  }, [isPublicPage, pathname, router, state.status]);
+
+  if (isPublicPage) {
     return <>{children}</>;
   }
+  if (state.status !== "signed-in") {
+    return <AuthGate state={state} />;
+  }
+  const { account } = state;
 
   const sidebar = (
     <div className="flex h-full flex-col px-4 py-6">
@@ -120,6 +150,10 @@ function ShellContent({ children }: { children: React.ReactNode }) {
           View your plan <ArrowUpRight size={13} aria-hidden="true" />
         </Link>
       </div>
+      <AccountMenu
+        email={account.user.email}
+        name={account.profile?.fullName ?? null}
+      />
       <p className="px-3 pt-5 text-[10px] text-[#9aa39a]">
         ClimateAI · TechXpo 2026
       </p>
@@ -205,6 +239,82 @@ function ShellContent({ children }: { children: React.ReactNode }) {
           {children}
         </main>
       </div>
+    </div>
+  );
+}
+
+/** Shown on app pages until the server says who is signed in. */
+function AuthGate({ state }: { state: Exclude<AuthState, { status: "signed-in" }> }) {
+  const { reload } = useAuth();
+
+  return (
+    <main className="flex min-h-dvh items-center justify-center bg-[#f8faf6] px-4 text-[#202720]">
+      {state.status === "error" ? (
+        <div
+          role="alert"
+          className="max-w-sm rounded-2xl border border-[#e4eae1] bg-white p-6 text-center"
+        >
+          <p className="text-sm font-semibold text-[#27362a]">
+            We could not load your workspace
+          </p>
+          <p className="mt-2 text-[13px] leading-5 text-[#6b7a6e]">
+            {state.message}
+          </p>
+          <Button className="mt-4" onClick={() => void reload()}>
+            Try again
+          </Button>
+        </div>
+      ) : (
+        <p
+          role="status"
+          className="flex items-center gap-2 text-sm text-[#6b7a6e]"
+        >
+          <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
+          Loading your workspace...
+        </p>
+      )}
+    </main>
+  );
+}
+
+function AccountMenu({ email, name }: { email: string; name: string | null }) {
+  const { signOut } = useAuth();
+  const [isSigningOut, setIsSigningOut] = useState(false);
+  const [error, setError] = useState("");
+
+  async function handleSignOut() {
+    setIsSigningOut(true);
+    setError("");
+    try {
+      await signOut(); // AppShell then sends the guest to the sign-in page
+    } catch (signOutError) {
+      setError(errorText(signOutError, "Could not sign out. Please try again."));
+      setIsSigningOut(false);
+    }
+  }
+
+  return (
+    <div className="mt-4 rounded-2xl border border-[#e4eae1] bg-white p-3">
+      <p className="truncate text-xs font-semibold text-[#27362a]">
+        {name ?? "Signed in"}
+      </p>
+      <p className="truncate text-[11px] text-[#7b857b]" title={email}>
+        {email}
+      </p>
+      <button
+        type="button"
+        onClick={() => void handleSignOut()}
+        disabled={isSigningOut}
+        className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-[12px] font-semibold text-[#23603b] hover:bg-[#f1f6ed] focus-visible:ring-2 focus-visible:ring-[#398253] disabled:opacity-60"
+      >
+        <LogOut size={14} aria-hidden="true" />
+        {isSigningOut ? "Signing out..." : "Sign out"}
+      </button>
+      {error && (
+        <p role="alert" className="mt-1 text-[11px] text-[#a33c32]">
+          {error}
+        </p>
+      )}
     </div>
   );
 }

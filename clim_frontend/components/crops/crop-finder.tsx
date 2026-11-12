@@ -1,22 +1,28 @@
 "use client";
 
 import { useState, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ChevronDown, MapPin, Search, Sprout } from "lucide-react";
+import { ChevronDown, Sprout } from "lucide-react";
 
+import { useAccount } from "@/components/providers/auth-provider";
+import {
+  FarmLocationSearch,
+  type FarmLocation,
+} from "@/components/shared/farm-location-search";
+import {
+  ChoiceCard,
+  SectionShell,
+  fieldClass,
+} from "@/components/shared/form-parts";
 import { parseCropAnalysis, saveCropAnalysis } from "@/lib/crop-analysis";
-
-type GeoResult = {
-  display_name: string;
-  lat: string;
-  lon: string;
-};
-
-type SelectedLocation = {
-  label: string;
-  lat: number;
-  lon: number;
-};
+import {
+  CROP_OPTIONS,
+  IRRIGATION_CHOICES,
+  IRRIGATION_METHODS,
+  SOIL_OPTIONS,
+  type IrrigationChoice,
+} from "@/lib/farm-options";
 
 type CropAnalysisPayload = {
   location: string;
@@ -88,183 +94,23 @@ const challengeCards = [
 
 const plantingSeasons = ["Spring", "Summer", "Fall", "Winter"];
 
-const cropOptions = [
-  "Rice",
-  "Corn",
-  "Soybeans",
-  "Wheat",
-  "Cotton",
-  "Sugarcane",
-  "Sweet potatoes",
-  "Pecans",
-  "Other",
-];
-
-const irrigationOptions = [
-  { label: "Yes", value: "yes" },
-  { label: "No", value: "no" },
-] as const;
-
-const fieldClass =
-  "w-full rounded-[14px] border border-[#dfe8df] bg-[#f9fbf9] px-3 py-3 text-[14px] text-[#1f2d27] outline-none focus:border-[#4b805d] focus:ring-2 focus:ring-[#4b805d]/20";
-
-function ChoiceCard({
-  name,
-  value,
-  label,
-  description,
-  type,
-  required = false,
-  variant = "card",
-  checked,
-  onChange,
-}: {
-  name: string;
-  value: string;
-  label: string;
-  description?: string;
-  type: "checkbox" | "radio";
-  required?: boolean;
-  variant?: "chip" | "card";
-  checked?: boolean;
-  onChange?: () => void;
-}) {
-  const className = description
-    ? "flex min-h-[112px] cursor-pointer flex-col rounded-[18px] border border-[#dfe8df] bg-white p-3 text-left transition has-[:checked]:border-[#1d4d31] has-[:checked]:bg-[#ebf4ec] has-[:checked]:shadow-[inset_0_0_0_1px_rgba(24,92,57,0.12)]"
-    : variant === "chip"
-      ? "flex cursor-pointer items-center gap-2 rounded-xl border border-[#dfe8df] bg-white px-3 py-2 text-[12px] font-medium text-[#4a594f] transition has-[:checked]:border-[#1d4d31] has-[:checked]:bg-[#e9f2eb] has-[:checked]:text-[#1e4d35]"
-      : type === "radio"
-        ? "flex cursor-pointer items-center justify-center gap-2 rounded-[12px] border border-[#dfe8df] bg-white px-3 py-2.5 text-[12px] font-semibold text-[#4d5d53] has-[:checked]:border-[#1d4d31] has-[:checked]:bg-[#eaf2eb] has-[:checked]:text-[#1d4d31]"
-        : "flex cursor-pointer items-center gap-2 rounded-[16px] border border-[#dfe8df] bg-white px-3 py-2.5 text-left text-[12px] font-medium text-[#4c5d52] has-[:checked]:border-[#739a7e] has-[:checked]:bg-[#eaf2eb] has-[:checked]:text-[#1e4d35]";
-  const controlledProps = checked === undefined ? {} : { checked, onChange };
-  const input = (
-    <input
-      type={type}
-      name={name}
-      value={value}
-      required={required}
-      className="size-4 shrink-0 accent-[#1d4d31]"
-      {...controlledProps}
-    />
-  );
-
-  return (
-    <label className={className}>
-      {description ? (
-        <>
-          <span className="flex items-center gap-2">
-            {input}
-            <span className="text-[13px] font-semibold text-[#1f2e29]">
-              {label}
-            </span>
-          </span>
-          <p className="mt-2 text-[12px] leading-5 text-[#5b6d62]">
-            {description}
-          </p>
-        </>
-      ) : (
-        <>
-          {input}
-          <span>{label}</span>
-        </>
-      )}
-    </label>
-  );
-}
-
-function SectionShell({
-  step,
-  title,
-  required = false,
-  rightLabel,
-  children,
-}: {
-  step: number;
-  title: string;
-  required?: boolean;
-  rightLabel?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-[22px] border border-[#dfe8df] bg-[#f8faf6] shadow-[0_1px_0_rgba(14,36,22,0.02)]">
-      <div className="flex items-center justify-between gap-4 border-b border-[#e3e9e0] bg-[#f4f8f1] px-5 py-4 sm:px-6">
-        <div className="flex items-center gap-3">
-          <span className="inline-flex h-6 w-6 items-center justify-center rounded-full bg-[#e7f1e7] text-[12px] font-bold text-[#1d4d31]">
-            {step}
-          </span>
-          <h3 className="text-[12px] font-bold tracking-[0.12em] text-[#1f3624] uppercase">
-            {title}
-          </h3>
-        </div>
-        {required ? (
-          <span className="text-[12px] font-semibold tracking-[0.14em] text-[#1d4d31] uppercase">
-            Required
-          </span>
-        ) : (
-          <span className="text-[12px] text-[#7c857e]">
-            {rightLabel ?? "Optional"}
-          </span>
-        )}
-      </div>
-      <div className="p-4 sm:p-5">{children}</div>
-    </section>
-  );
-}
-
 export function CropFinder() {
   const router = useRouter();
+  // Saved farm profile, used only as starting values. Every field stays editable here.
+  const profile = useAccount()?.profile ?? null;
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [locationQuery, setLocationQuery] = useState("");
-  const [geoResults, setGeoResults] = useState<GeoResult[]>([]);
-  const [geoStatus, setGeoStatus] = useState<
-    "idle" | "loading" | "empty" | "error"
-  >("idle");
   const [selectedLocation, setSelectedLocation] =
-    useState<SelectedLocation | null>(null);
-  const [irrigationAvailable, setIrrigationAvailable] = useState<
-    "yes" | "no" | ""
-  >("");
+    useState<FarmLocation | null>(() =>
+      profile ? { label: profile.location, ...profile.coordinates } : null,
+    );
+  const [irrigationAvailable, setIrrigationAvailable] =
+    useState<IrrigationChoice>(() =>
+      profile ? (profile.irrigation.available ? "yes" : "no") : "",
+    );
   const [submission, setSubmission] = useState<SubmissionState>({
     status: "idle",
     message: "",
   });
-
-  async function searchLocation() {
-    const q = locationQuery.trim();
-    if (q.length < 3) return;
-
-    setGeoStatus("loading");
-    setSelectedLocation(null);
-    setGeoResults([]);
-
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=us&q=${encodeURIComponent(q)}`,
-        { headers: { Accept: "application/json" } },
-      );
-      if (!response.ok) {
-        throw new Error(`Location search failed (${response.status}).`);
-      }
-
-      const results: GeoResult[] = await response.json();
-      setGeoResults(results);
-      setGeoStatus(results.length === 0 ? "empty" : "idle");
-    } catch {
-      setGeoResults([]);
-      setGeoStatus("error");
-    }
-  }
-
-  function chooseLocation(location: GeoResult) {
-    setSelectedLocation({
-      label: location.display_name,
-      lat: Number.parseFloat(location.lat),
-      lon: Number.parseFloat(location.lon),
-    });
-    setLocationQuery(location.display_name);
-    setGeoResults([]);
-    setGeoStatus("idle");
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -390,150 +236,24 @@ export function CropFinder() {
         Enter your farm details. We match your local 30-year climate and
         soil against 30 crops and rank the best fits.
       </p>
+      {profile && (
+        <p className="mt-2 text-[13px] text-[#5d6a60]">
+          Prefilled from your farm profile.{" "}
+          <Link
+            href="/profile"
+            className="font-semibold text-[#1d4d31] underline-offset-2 hover:underline"
+          >
+            Edit profile
+          </Link>
+        </p>
+      )}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         <SectionShell step={1} title="Farm Location" required>
-          <div className="space-y-3">
-            <label
-              htmlFor="farm-location"
-              className="block text-[12px] font-bold tracking-[0.12em] text-[#5f7163] uppercase"
-            >
-              Search Farm Location or Agro-Climatic Zone
-            </label>
-            <div className="flex items-center gap-3 rounded-[14px] border border-[#dfe8df] bg-[#f9fbf9] px-3 py-3 shadow-inner shadow-[#edf2ed]">
-              <Search className="h-4 w-4 text-[#4d6858]" />
-              <input
-                id="farm-location"
-                name="location"
-                type="text"
-                required
-                autoComplete="off"
-                placeholder="City, region, or address"
-                value={locationQuery}
-                onChange={(event) => {
-                  setLocationQuery(event.target.value);
-                  setSelectedLocation(null);
-                  setGeoResults([]);
-                  setGeoStatus("idle");
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void searchLocation();
-                  }
-                }}
-                className="w-full border-0 bg-transparent text-[15px] text-[#1e2d29] placeholder:text-[#8c9a92] focus:outline-none"
-              />
-              <button
-                type="button"
-                onClick={() => void searchLocation()}
-                disabled={geoStatus === "loading"}
-                className="shrink-0 rounded-full bg-[#1b4d35] px-3 py-1.5 text-[12px] font-semibold text-white disabled:opacity-60"
-              >
-                {geoStatus === "loading" ? "Searching..." : "Search"}
-              </button>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-[1.2fr_0.8fr]">
-              <div className="rounded-[16px] border border-[#dfe8df] bg-[#eef3ee] p-3">
-                {selectedLocation ? (
-                  <iframe
-                    title={`Map of ${selectedLocation.label}`}
-                    loading="lazy"
-                    className="h-[190px] w-full rounded-[12px] border border-[#d6e1d5]"
-                    src={`https://www.openstreetmap.org/export/embed.html?bbox=${selectedLocation.lon - 0.02},${selectedLocation.lat - 0.02},${selectedLocation.lon + 0.02},${selectedLocation.lat + 0.02}&layer=mapnik&marker=${selectedLocation.lat},${selectedLocation.lon}`}
-                  />
-                ) : (
-                  <div
-                    role="img"
-                    aria-label="Map preview coming soon"
-                    className="relative h-[190px] overflow-hidden rounded-[12px] border border-[#d6e1d5] bg-[radial-gradient(circle_at_20%_25%,rgba(133,180,128,0.35),transparent_18%),linear-gradient(160deg,#edf5ed_0%,#ddeade_30%,#d5e2d5_100%)]"
-                  >
-                    <div className="absolute inset-x-0 top-0 h-16 bg-[linear-gradient(180deg,rgba(255,255,255,0.5),transparent)]" />
-                    <div className="absolute left-[18%] top-[28%] h-10 w-10 rounded-full border-2 border-white/60 bg-[#7ea685]/70" />
-                    <div className="absolute left-[52%] top-[22%] h-12 w-12 rounded-full border-2 border-white/60 bg-[#7ea685]/80" />
-                    <div className="absolute right-[16%] top-[20%] h-8 w-8 rounded-full border-2 border-white/60 bg-[#7ea685]/60" />
-                    <div className="absolute inset-0">
-                      <svg
-                        viewBox="0 0 400 220"
-                        className="h-full w-full"
-                        preserveAspectRatio="none"
-                      >
-                        <path
-                          d="M40,120 C110,60,170,35,230,80 S320,150,370,95"
-                          fill="none"
-                          stroke="#a3b9a2"
-                          strokeWidth="3"
-                          strokeDasharray="8 12"
-                        />
-                        <path
-                          d="M90,160 C150,140,190,150,250,120 S340,80,380,105"
-                          fill="none"
-                          stroke="#a7bca6"
-                          strokeWidth="2.5"
-                          strokeDasharray="7 9"
-                        />
-                        <path
-                          d="M60,80 C120,100,165,55,195,70 S300,120,360,60"
-                          fill="none"
-                          stroke="#a7bca6"
-                          strokeWidth="2.5"
-                          strokeDasharray="7 9"
-                        />
-                      </svg>
-                    </div>
-                    <div className="absolute left-[48%] top-[46%] flex h-5 w-5 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-2 border-white bg-[#1b4d35] text-[12px] font-bold text-white">
-                      ●
-                    </div>
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/25">
-                      <span className="rounded-full border border-[#dfe8df] bg-white/95 px-4 py-2 text-[12px] font-semibold text-[#294c37] shadow-sm">
-                        Map preview coming soon
-                      </span>
-                    </div>
-                  </div>
-                )}
-              </div>
-              <div className="rounded-[16px] border border-[#dfe8df] bg-[#f8faf7] p-3">
-                <p className="text-[12px] font-semibold tracking-[0.14em] text-[#76857d] uppercase">
-                  Location preview
-                </p>
-                {selectedLocation ? (
-                  <div className="mt-3 flex min-h-24 items-start gap-2 rounded-[14px] border border-[#dfe8df] bg-white px-3 py-3 text-[12px] leading-5 text-[#52645a]">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                    <div className="min-w-0">
-                      <p className="break-words">{selectedLocation.label}</p>
-                      <p className="mt-2 text-[#7c857e]">
-                        {selectedLocation.lat.toFixed(4)},{" "}
-                        {selectedLocation.lon.toFixed(4)}
-                      </p>
-                    </div>
-                  </div>
-                ) : geoResults.length > 0 ? (
-                  <div className="mt-3 flex max-h-[190px] flex-col gap-1 overflow-y-auto rounded-[14px] border border-[#dfe8df] bg-white p-2 text-[12px] leading-5 text-[#52645a]">
-                    {geoResults.map((geoResult) => (
-                      <button
-                        key={`${geoResult.lat}-${geoResult.lon}-${geoResult.display_name}`}
-                        type="button"
-                        onClick={() => chooseLocation(geoResult)}
-                        className="rounded-lg px-2 py-1.5 text-left hover:bg-[#eef4ee]"
-                      >
-                        {geoResult.display_name}
-                      </button>
-                    ))}
-                  </div>
-                ) : (
-                  <div className="mt-3 flex min-h-24 items-start gap-2 rounded-[14px] border border-[#dfe8df] bg-white px-3 py-3 text-[12px] leading-5 text-[#52645a]">
-                    <MapPin className="mt-0.5 h-4 w-4 shrink-0" />
-                    {geoStatus === "empty"
-                      ? "No matches. Try a nearby city or add the state."
-                      : geoStatus === "error"
-                        ? "Location search failed. Try again."
-                        : "Type a location and press Search."}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
+          <FarmLocationSearch
+            value={selectedLocation}
+            onChange={setSelectedLocation}
+          />
         </SectionShell>
 
         <SectionShell step={2} title="Farm Details" required>
@@ -546,6 +266,7 @@ export function CropFinder() {
                 <input
                   name="farmSize"
                   type="number"
+                  defaultValue={profile?.farm.size}
                   min="0.01"
                   step="any"
                   required
@@ -556,7 +277,7 @@ export function CropFinder() {
                   name="farmSizeUnit"
                   aria-label="Farm size unit"
                   className={`${fieldClass} max-w-36`}
-                  defaultValue="acres"
+                  defaultValue={profile?.farm.sizeUnit ?? "acres"}
                 >
                   <option value="acres">Acres</option>
                   <option value="hectares">Hectares</option>
@@ -583,13 +304,17 @@ export function CropFinder() {
               <span className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5d7267] uppercase">
                 Soil type (Optional)
               </span>
-              <select name="soilType" className={fieldClass} defaultValue="">
+              <select
+                name="soilType"
+                className={fieldClass}
+                defaultValue={profile?.soilType ?? ""}
+              >
                 <option value="">Select soil type</option>
-                <option value="Clay">Clay</option>
-                <option value="Silt">Silt</option>
-                <option value="Loam">Loam</option>
-                <option value="Sandy">Sandy</option>
-                <option value="Not sure">Not sure</option>
+                {SOIL_OPTIONS.map((soil) => (
+                  <option key={soil} value={soil}>
+                    {soil}
+                  </option>
+                ))}
               </select>
             </label>
           </div>
@@ -606,7 +331,7 @@ export function CropFinder() {
                 Currently Planted or Cultivated Crops
               </legend>
               <div className="flex flex-wrap gap-2">
-                {cropOptions.map((crop) => (
+                {CROP_OPTIONS.map((crop) => (
                   <ChoiceCard
                     key={crop}
                     name="currentCrops"
@@ -614,6 +339,7 @@ export function CropFinder() {
                     label={crop}
                     type="checkbox"
                     variant="chip"
+                    defaultChecked={profile?.currentCrops.includes(crop)}
                   />
                 ))}
               </div>
@@ -625,7 +351,7 @@ export function CropFinder() {
                   Irrigation Availability
                 </legend>
                 <div className="flex gap-4 rounded-[12px] border border-[#dfe8df] bg-[#f9fbf9] px-3 py-3">
-                  {irrigationOptions.map(({ label, value }) => (
+                  {IRRIGATION_CHOICES.map(({ label, value }) => (
                     <ChoiceCard
                       key={value}
                       name="irrigationAvailable"
@@ -648,15 +374,16 @@ export function CropFinder() {
                 <select
                   name="irrigationMethod"
                   className={`${fieldClass} disabled:cursor-not-allowed disabled:opacity-50`}
-                  defaultValue=""
+                  defaultValue={profile?.irrigation.method ?? ""}
                   disabled={irrigationAvailable !== "yes"}
                   required={irrigationAvailable === "yes"}
                 >
                   <option value="">Select a method</option>
-                  <option value="Drip">Drip</option>
-                  <option value="Sprinkler">Sprinkler</option>
-                  <option value="Flood">Flood</option>
-                  <option value="Other">Other</option>
+                  {IRRIGATION_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
                 </select>
               </label>
             </div>
@@ -800,6 +527,7 @@ export function CropFinder() {
           </p>
         )}
       </form>
+
 
       <footer className="mt-5 flex flex-col items-center justify-between gap-3 border-t border-[#dfe8df] pt-3 text-[12px] text-[#7a857f] sm:flex-row">
         <div className="flex items-center gap-2">
