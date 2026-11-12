@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { RefreshCw, Sparkles } from "lucide-react";
 import { Renderer } from "@openuidev/react-lang";
 import { openuiLibrary } from "@openuidev/react-ui/genui-lib";
+import { Skeleton, StateBlock, buttonClass } from "@/components/shared/ui-kit";
 
 /**
  * Generative presentation of data the page already has.
@@ -180,62 +181,61 @@ export function GenerativeBrief({
     <section
       aria-label="Generated brief"
       aria-busy={status === "loading"}
-      className="overflow-hidden rounded-2xl border border-[#dfe8df] bg-[#fbfcf9]"
+      className="overflow-hidden rounded-[14px] border border-line bg-panel"
     >
-      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-[#e7ebe5] bg-white px-4 py-3.5 sm:px-5">
-        <div className="flex items-start gap-2.5">
-          <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-lg bg-[#e9f2eb] text-[#1d4d31]">
-            <Sparkles size={15} />
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-line bg-paper px-5 py-4 sm:px-6">
+        <div className="flex min-w-0 items-center gap-3">
+          <span className="flex size-8 shrink-0 items-center justify-center rounded-[10px] bg-marigold-tint text-marigold-ink">
+            <Sparkles size={16} aria-hidden="true" />
           </span>
-          <div>
-            <p className="text-[10px] font-semibold tracking-[0.15em] text-[#8a9389] uppercase">
-              {label}
-            </p>
-            <h2 className="mt-0.5 font-heading text-base font-bold text-[#2c3a30]">{title}</h2>
+          <div className="min-w-0">
+            <h2 className="font-heading text-[17px] font-bold text-ink">{title}</h2>
+            <p className="mt-0.5 text-[12.5px] text-ink-mute">{label} · AI-generated layout of the values on this page</p>
           </div>
         </div>
         <button
           type="button"
           onClick={() => void generate({ refresh: true })}
           disabled={status === "loading"}
-          className="inline-flex items-center gap-1.5 rounded-full border border-[#dfe8df] bg-white px-3 py-1.5 text-[11px] font-semibold text-[#1d4d31] transition hover:border-[#739a7e] disabled:cursor-wait disabled:opacity-60"
+          className={buttonClass({ variant: "secondary", size: "sm" })}
         >
-          <RefreshCw size={12} className={status === "loading" ? "animate-spin" : undefined} />
+          <RefreshCw size={14} className={status === "loading" ? "animate-spin" : undefined} aria-hidden="true" />
           {status === "loading" ? "Generating…" : "Regenerate"}
         </button>
       </div>
 
-      <div className="px-4 py-4 sm:px-5" data-openui-theme="light">
+      <div className="px-5 py-5 sm:px-6" data-openui-theme="light">
         {status === "loading" && (
-          <div role="status" aria-live="polite" className="space-y-2.5">
-            <div className="h-4 w-2/5 animate-pulse rounded bg-[#e7ece6]" />
-            <div className="grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+          <div role="status" aria-live="polite" className="space-y-3">
+            <Skeleton className="h-4 w-2/5" />
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
               {[0, 1, 2, 3].map((index) => (
-                <div key={index} className="h-16 animate-pulse rounded-xl bg-[#eef2ec]" />
+                <Skeleton key={index} className="h-16" />
               ))}
             </div>
-            <div className="h-40 animate-pulse rounded-xl bg-[#eef2ec]" />
-            <p className="pt-1 text-[11px] text-[#7e877e]">
-              Laying out the values already computed below — no new data is added.
+            <Skeleton className="h-40" />
+            <p className="pt-1 text-[13px] text-ink-mute">
+              Laying out the values already computed on this page. No new data is added.
             </p>
           </div>
         )}
 
         {status === "error" && (
-          <div role="alert" className="rounded-xl border border-[#f0cfc6] bg-[#fdf0ed] px-4 py-3">
-            <p className="text-xs font-semibold text-[#a33c32]">The generated brief is unavailable</p>
-            <p className="mt-1 text-[11px] leading-5 text-[#8a4a42]">{errorMessage}</p>
-            <p className="mt-1.5 text-[11px] leading-5 text-[#8a4a42]">
-              The sections below are unaffected — they do not depend on the model.
-            </p>
-            <button
-              type="button"
-              onClick={() => void generate({ refresh: true })}
-              className="mt-2.5 rounded-full bg-[#a33c32] px-3.5 py-1.5 text-[11px] font-semibold text-white"
-            >
-              Try again
-            </button>
-          </div>
+          <StateBlock
+            kind="error"
+            title="The generated brief is unavailable"
+            action={
+              <button
+                type="button"
+                onClick={() => void generate({ refresh: true })}
+                className={buttonClass({ variant: "danger", size: "sm" })}
+              >
+                Try again
+              </button>
+            }
+          >
+            {errorMessage} The rest of this page is unaffected; it does not depend on the model.
+          </StateBlock>
         )}
 
         {status === "ready" && program && (
@@ -250,9 +250,9 @@ export function GenerativeBrief({
               }
             />
             {hasRenderErrors && (
-              <p className="mt-3 rounded-lg bg-[#fdf3e3] px-3 py-2 text-[11px] leading-5 text-[#9a6a1c]">
-                Part of the generated layout could not be rendered. The content below is
-                unaffected — regenerate to try a different layout.
+              <p className="mt-3 rounded-[10px] bg-marigold-tint px-3.5 py-2.5 text-[13px] leading-[1.5] text-marigold-ink">
+                Part of the generated layout could not be rendered. The rest of this page is
+                unaffected. Regenerate to try a different layout.
               </p>
             )}
           </>

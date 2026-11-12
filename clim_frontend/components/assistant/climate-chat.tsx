@@ -77,18 +77,18 @@ export function ClimateChat() {
   return (
     <div className="h-full min-h-0 w-full">
       <section
-        className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e7ebe5] bg-white"
-        aria-label="ClimateAI conversation"
+        className="flex h-full min-h-0 flex-col overflow-hidden rounded-[14px] border border-line bg-panel"
+        aria-label="ClimateCrop AI conversation"
       >
-        <header className="flex items-center justify-between border-b border-[#edf0eb] px-4 py-3.5 sm:px-5">
+        <header className="flex items-center justify-between gap-3 border-b border-line bg-paper px-4 py-3.5 sm:px-5">
           <div className="flex items-center gap-3">
-            <span className="flex size-9 items-center justify-center rounded-full bg-[#eaf2e8] text-[#286540]">
-              <Sprout size={17} />
+            <span className="flex size-10 items-center justify-center rounded-[10px] bg-forest text-marigold">
+              <Sprout size={19} aria-hidden="true" />
             </span>
             <div>
-              <p className="text-xs font-semibold">ClimateAI assistant</p>
-              <p className="mt-0.5 text-[10px] text-[#899289]">
-                Context: {location} · demo data
+              <h1 className="font-heading text-[16px] font-bold text-ink">ClimateCrop AI assistant</h1>
+              <p className="mt-0.5 text-[13px] text-ink-mute">
+                Context: {location || "no location set"} · demo data
               </p>
             </div>
           </div>
@@ -97,24 +97,22 @@ export function ClimateChat() {
         <div className="min-h-0 flex-1">
           {messages.length === 0 ? (
             <div className="flex h-full min-h-0 flex-col items-center justify-center px-5 py-5 text-center sm:px-10">
-              <span className="flex size-12 items-center justify-center rounded-2xl bg-[#f1f6ed] text-[#398253]">
-                <MessageCircle size={21} />
-              </span>
-              <h2 className="mt-4 font-heading text-xl font-bold tracking-[-0.03em]">
+              <h2 className="flex items-center gap-3 font-display text-[26px] leading-tight text-ink">
+                <MessageCircle size={26} className="shrink-0 text-forest-mid" aria-hidden="true" />
                 What would you like to understand?
               </h2>
-              <p className="mt-2 max-w-md text-xs leading-5 text-[#7b857b]">
+              <p className="mt-2 max-w-[52ch] text-[15px] leading-[1.6] text-ink-soft">
                 Ask a question about the demonstration data, or start with one
                 of these prompts. The assistant will identify missing context
                 instead of guessing.
               </p>
-              <div className="mt-6 flex max-w-2xl flex-wrap justify-center gap-2">
+              <div className="mt-6 flex max-w-2xl flex-wrap justify-center gap-2.5">
                 {suggestedQuestions.map((question) => (
                   <button
                     key={question}
                     type="button"
                     onClick={() => submitQuestion(question)}
-                    className="rounded-full border border-[#e3e9e1] bg-[#fcfcf8] px-3.5 py-2 text-[11px] font-medium text-[#536257] transition-colors hover:border-[#b9d0b6] hover:bg-[#f1f6ed] focus-visible:ring-2 focus-visible:ring-[#398253] focus-visible:ring-offset-2"
+                    className="min-h-11 rounded-full border border-line bg-panel px-4 py-2 text-[14px] font-medium text-ink-soft transition-[background-color,border-color,transform] hover:-translate-y-px hover:border-forest-mid/40 hover:bg-forest-tint hover:text-forest active:translate-y-0"
                   >
                     {question}
                   </button>
@@ -142,27 +140,27 @@ export function ClimateChat() {
                             className="gap-2.5"
                           >
                             {!isUser && (
-                              <MessageAvatar className="size-8 min-w-8 self-start bg-[#eaf2e8] text-[#286540]">
+                              <MessageAvatar className="size-8 min-w-8 self-start bg-forest text-marigold">
                                 <Sprout size={15} aria-hidden="true" />
                               </MessageAvatar>
                             )}
                             <MessageContent className="max-w-[88%] gap-1.5 sm:max-w-[78%]">
                               <MessageHeader
-                                className={`px-1 text-[10px] ${isUser ? "justify-end" : ""}`}
+                                className={`px-1 text-[12.5px] ${isUser ? "justify-end" : ""}`}
                               >
-                                {isUser ? "You" : "ClimateAI"}
+                                {isUser ? "You" : "ClimateCrop AI"}
                               </MessageHeader>
                               <Bubble
                                 align={isUser ? "end" : "start"}
                                 variant={isUser ? "default" : "secondary"}
                                 className="max-w-full"
                               >
-                                <BubbleContent className="px-4 py-3 text-xs leading-6">
+                                <BubbleContent className="px-4 py-3 text-[14.5px] leading-[1.65] whitespace-pre-wrap">
                                   {text}
                                 </BubbleContent>
                               </Bubble>
                               {!isUser && (
-                                <MessageFooter className="px-1 pt-1 text-[9px]">
+                                <MessageFooter className="px-1 pt-1 text-[12px]">
                                   Based on the available demo context · not
                                   field advice
                                 </MessageFooter>
@@ -175,15 +173,15 @@ export function ClimateChat() {
                     {isBusy && (
                       <MessageScrollerItem scrollAnchor>
                         <Message align="start">
-                          <MessageAvatar className="size-8 min-w-8 self-start bg-[#eaf2e8] text-[#286540]">
-                            <Sprout size={15} />
+                          <MessageAvatar className="size-8 min-w-8 self-start bg-forest text-marigold">
+                            <Sprout size={15} aria-hidden="true" />
                           </MessageAvatar>
                           <MessageContent>
-                            <MessageHeader className="px-1 text-[10px]">
-                              ClimateAI
+                            <MessageHeader className="px-1 text-[12.5px]">
+                              ClimateCrop AI
                             </MessageHeader>
                             <Bubble variant="secondary">
-                              <BubbleContent className="flex items-center gap-2 px-4 py-3 text-xs">
+                              <BubbleContent className="flex items-center gap-2 px-4 py-3 text-[14px]">
                                 <LoaderCircle
                                   size={14}
                                   className="animate-spin"
@@ -205,10 +203,10 @@ export function ClimateChat() {
 
         {error && (
           <div
-            className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#edd8d3] bg-[#fbf4f2] px-4 py-3 sm:mx-5"
+            className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-[12px] bg-clay-tint px-4 py-3 sm:mx-5"
             role="alert"
           >
-            <p className="text-xs leading-5 text-[#87594c]">
+            <p className="text-[14px] leading-[1.5] text-clay-ink">
               The assistant could not connect. Please try again; no answer was
               invented.
             </p>
@@ -226,12 +224,12 @@ export function ClimateChat() {
 
         <form
           onSubmit={handleSubmit}
-          className="border-t border-[#edf0eb] bg-[#fcfcf8] p-3 sm:p-4"
+          className="border-t border-line bg-paper p-3 sm:p-4"
         >
           <label htmlFor="assistant-prompt" className="sr-only">
-            Ask ClimateAI a question
+            Ask ClimateCrop AI a question
           </label>
-          <div className="flex items-end gap-2 rounded-2xl border border-[#e2e8df] bg-white p-2 focus-within:border-[#a8c5a5] focus-within:ring-2 focus-within:ring-[#398253]/15">
+          <div className="flex items-end gap-2 rounded-[12px] border border-input bg-panel p-2 transition-colors focus-within:border-forest-mid focus-within:ring-3 focus-within:ring-forest-mid/15">
             <Textarea
               id="assistant-prompt"
               rows={1}
@@ -241,7 +239,7 @@ export function ClimateChat() {
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={handleComposerKeyDown}
               disabled={isBusy}
-              className="max-h-32 min-h-10 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
+              className="max-h-32 min-h-11 resize-none border-0 bg-transparent px-2 py-2.5 text-[15px] shadow-none focus-visible:ring-0"
             />
             {isBusy ? (
               <Button
@@ -250,9 +248,9 @@ export function ClimateChat() {
                 size="icon"
                 aria-label="Stop generating"
                 onClick={stop}
-                className="shrink-0 rounded-xl"
+                className="size-11 shrink-0 rounded-[10px]"
               >
-                <span className="size-2.5 rounded-sm bg-current" />
+                <span className="size-3 rounded-[3px] bg-current" />
               </Button>
             ) : (
               <Button
@@ -260,20 +258,20 @@ export function ClimateChat() {
                 size="icon"
                 aria-label="Send question"
                 disabled={!input.trim()}
-                className="shrink-0 rounded-xl"
+                className="size-11 shrink-0 rounded-[10px]"
               >
                 <ArrowUp />
               </Button>
             )}
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1">
-            <Marker className="text-[9px]">
+            <Marker className="text-[12px]">
               <MarkerContent>
                 Demonstration data only · no live weather or soil source
                 connected
               </MarkerContent>
             </Marker>
-            <span className="text-[9px] text-[#9aa39a]">
+            <span className="hidden text-[12px] text-ink-mute sm:inline">
               Enter to send · Shift + Enter for a new line
             </span>
           </div>

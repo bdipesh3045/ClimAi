@@ -1,21 +1,49 @@
-@import url("https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap");
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 
 @custom-variant dark (&:is(.dark *));
 
+/* ---------------------------------------------------------------------------
+   ClimateCrop AI — "Seed Packet" system
+   White packet paper on a pale sage ground, a deep field-green rail, and spot
+   inks that each carry one meaning: marigold = suitable / outlook,
+   sow-blue = rain, clay = heat and risk. Wide Archivo names things;
+   Public Sans does the work. Figures are tabular everywhere.
+--------------------------------------------------------------------------- */
 @theme inline {
-  --color-brand-cream: #f4f6f0;
-  --color-brand-sage: #e8ece3;
-  --color-brand-card: #ffffff;
-  --color-brand-dark: #0f2617;
-  --color-brand-forest: #153e26;
-  --color-brand-accent: #22c55e;
-  --color-brand-subtle: #6b7a6e;
-  --color-brand-border: #e3e8de;
-  --font-sans: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
-  --font-heading: "Plus Jakarta Sans", ui-sans-serif, system-ui, sans-serif;
+  /* Ground and paper */
+  --color-ground: #f1f2ec;
+  --color-paper: #f7f8f3;
+  --color-panel: #ffffff;
+
+  /* Ink */
+  --color-ink: #17201a;
+  --color-ink-soft: #46514a;
+  --color-ink-mute: #626c65;
+  --color-line: #dbe0d5;
+  --color-line-soft: #eaece4;
+
+  /* Field green (rail, primary actions, "good") */
+  --color-forest: #1e4a30;
+  --color-forest-deep: #12301f;
+  --color-forest-mid: #2b6843;
+  --color-forest-tint: #e3ede0;
+
+  /* Spot inks */
+  --color-marigold: #e2a12a;
+  --color-marigold-ink: #865706;
+  --color-marigold-tint: #fbefd2;
+  --color-sow: #2c5d8b;
+  --color-sow-tint: #e2ecf5;
+  --color-clay: #ad4129;
+  --color-clay-tint: #f8e4dd;
+  --color-clay-ink: #7d3322;
+
+  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-archivo), var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -52,42 +80,78 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  --animate-rise: rise 520ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-sow: sow 460ms cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
+/* shadcn primitives (Button, Checkbox, Bubble, Message…) read these. */
 :root {
   color-scheme: light;
-  --background: #fcfcf8;
-  --foreground: #202720;
+  --background: #f1f2ec;
+  --foreground: #17201a;
   --card: #ffffff;
-  --card-foreground: #202720;
+  --card-foreground: #17201a;
   --popover: #ffffff;
-  --popover-foreground: #202720;
-  --primary: #17452d;
+  --popover-foreground: #17201a;
+  --primary: #1e4a30;
   --primary-foreground: #ffffff;
-  --secondary: #f1f6ed;
-  --secondary-foreground: #17452d;
-  --muted: #f1f6ed;
-  --muted-foreground: #777f77;
-  --accent: #e8f0e5;
-  --accent-foreground: #17452d;
-  --destructive: #b34a3c;
-  --border: #e7ebe5;
-  --input: #e7ebe5;
-  --ring: #398253;
-  --chart-1: #398253;
-  --chart-2: #a8c5a5;
-  --chart-3: #7f9ca3;
-  --chart-4: #d0a56d;
-  --chart-5: #b97e61;
-  --radius: 0.8rem;
-  --sidebar: #fcfcf8;
-  --sidebar-foreground: #202720;
-  --sidebar-primary: #17452d;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #f1f6ed;
-  --sidebar-accent-foreground: #17452d;
-  --sidebar-border: #e7ebe5;
-  --sidebar-ring: #398253;
+  --secondary: #e3ede0;
+  --secondary-foreground: #12301f;
+  --muted: #eaece4;
+  --muted-foreground: #626c65;
+  --accent: #e3ede0;
+  --accent-foreground: #12301f;
+  --destructive: #ad4129;
+  --border: #dbe0d5;
+  --input: #cfd5c8;
+  --ring: #2b6843;
+  --chart-1: #2b6843;
+  --chart-2: #e2a12a;
+  --chart-3: #2c5d8b;
+  --chart-4: #ad4129;
+  --chart-5: #8f9a90;
+  --radius: 0.75rem;
+  --sidebar: #1e4a30;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #ffffff;
+  --sidebar-primary-foreground: #12301f;
+  --sidebar-accent: #2b6843;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #2b5a3d;
+  --sidebar-ring: #e2a12a;
+}
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* The sow chart fills cell by cell, like a stamp run across the packet. */
+@keyframes sow {
+  from {
+    opacity: 0;
+    transform: scaleY(0.35);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
 }
 
 @layer base {
@@ -97,11 +161,16 @@
 
   html {
     scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
 
   body {
     @apply bg-background text-foreground;
     font-family: var(--font-sans);
+    font-size: 15px;
+    line-height: 1.55;
+    caret-color: var(--color-forest-mid);
+    scrollbar-color: #c3cabd transparent;
   }
 
   h1,
@@ -122,56 +191,91 @@
   input[type="checkbox"],
   input[type="radio"] {
     appearance: auto;
-    accent-color: #1d4d31;
+    accent-color: var(--color-forest);
   }
 
   ::selection {
-    background: #dcebd9;
-    color: #17452d;
+    background: var(--color-marigold-tint);
+    color: var(--color-ink);
+  }
+
+  a {
+    text-underline-offset: 3px;
+  }
+
+  p,
+  li,
+  dd {
+    text-wrap: pretty;
+  }
+
+  :focus-visible {
+    outline: 2px solid var(--color-forest-mid);
+    outline-offset: 2px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #c3cabd;
+    border: 3px solid transparent;
+    border-radius: 999px;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  /* Reduced motion keeps state feedback (colour, opacity) and drops travel. */
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      animation-duration: 1ms !important;
+      animation-iteration-count: 1 !important;
+      transition-property: color, background-color, border-color, opacity !important;
+    }
   }
 }
 
-:root {
-  color-scheme: light;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-@layer base {
-  * {
-    @apply border-border outline-ring/50;
+@layer components {
+  /* Wide, heavy Archivo: crop names, page titles, figures that matter. */
+  .font-display {
+    font-family: var(--font-heading);
+    font-stretch: 118%;
+    font-weight: 800;
+    letter-spacing: -0.02em;
   }
-  body {
-    @apply bg-background text-foreground;
+
+  /* Figures line up in columns; this is a data product. */
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .skeleton {
+    background: linear-gradient(90deg, #e8ebe3 0%, #f3f5ef 40%, #e8ebe3 80%);
+    background-size: 250% 100%;
+    animation: shimmer 1.4s linear infinite;
+  }
+
+  /* Leaflet's own chrome, re-inked to match the packet. */
+  .leaflet-container {
+    font-family: var(--font-sans);
+    background: #e7ebe2;
+  }
+  .leaflet-tile-pane {
+    filter: saturate(0.55) contrast(0.96) brightness(1.03);
+  }
+  .leaflet-control-attribution {
+    font-size: 10px;
+    background: rgb(255 255 255 / 0.85) !important;
+  }
+  .leaflet-control-zoom a {
+    color: var(--color-forest) !important;
   }
 }

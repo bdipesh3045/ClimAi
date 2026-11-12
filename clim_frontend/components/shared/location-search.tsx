@@ -1,104 +1,136 @@
 "use client";
 
 import { useState } from "react";
-import { ArrowRight, MapPin, Search } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
+import { MapPin } from "lucide-react";
 import { useAppData } from "@/components/providers/app-data-provider";
+import { LocationMap } from "@/components/shared/location-map";
+import { SearchField } from "@/components/shared/search-field";
+import { HelpText, Panel, PanelHead, ResultItem, ResultList, buttonClass } from "@/components/shared/ui-kit";
 
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:5000";
+
+type LocationResult = { label: string; lat: number; lon: number };
+
+/**
+ * The workspace location. Looked up through the backend's geocoding proxy so
+ * every page can start from the same place with real coordinates; a typed
+ * name can still be saved on its own when the lookup is unavailable.
+ */
 export function LocationSearch() {
-  const { location, setLocation } = useAppData();
+  const { location, coordinates, setLocation } = useAppData();
   const [query, setQuery] = useState("");
-  const [status, setStatus] = useState("");
+  const [results, setResults] = useState<LocationResult[]>([]);
+  const [status, setStatus] = useState<"idle" | "loading" | "empty" | "error" | "short" | "saved">("idle");
 
-  function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const nextLocation = query.trim();
-    if (!nextLocation) {
-      setStatus("Enter a location to continue.");
+  async function search() {
+    const q = query.trim();
+    if (q.length < 3) {
+      setStatus("short");
       return;
     }
+    setStatus("loading");
+    setResults([]);
+    try {
+      const response = await fetch(`${API_BASE}/api/locations/search?q=${encodeURIComponent(q)}`);
+      const payload = (await response.json()) as { results?: LocationResult[]; error?: string };
+      if (!response.ok) throw new Error(payload.error ?? "failed");
+      setResults(payload.results ?? []);
+      setStatus((payload.results ?? []).length ? "idle" : "empty");
+    } catch {
+      setStatus("error");
+    }
+  }
 
-    setLocation(nextLocation);
+  function choose(item: LocationResult) {
+    setLocation(item.label, { lat: item.lat, lon: item.lon });
     setQuery("");
-    setStatus("Location saved. Live place lookup is not connected.");
+    setResults([]);
+    setStatus("saved");
+  }
+
+  function saveTyped() {
+    const typed = query.trim();
+    if (!typed) return;
+    setLocation(typed, null);
+    setQuery("");
+    setResults([]);
+    setStatus("saved");
   }
 
   return (
-    <section
-      className="rounded-2xl border border-[#e3e9e0] bg-white p-5 shadow-sm sm:p-6"
-      aria-labelledby="location-search-heading"
-    >
-      <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#edf4e9] text-[#2e6d42]">
-          <MapPin size={18} aria-hidden="true" />
-        </span>
-        <div>
-          <p className="text-[10px] font-semibold tracking-[0.15em] text-[#7f8b7f] uppercase">
-            Location search
-          </p>
-          <h2
-            id="location-search-heading"
-            className="mt-1 font-heading text-xl font-bold tracking-[-0.03em]"
-          >
-            Where are you growing?
-          </h2>
-          <p className="mt-1 text-xs leading-5 text-[#778177]">
-            Search any city, region, or postal code. No preset places or
-            suggestions.
-          </p>
-        </div>
-      </div>
+    <Panel id="location" className="scroll-mt-24 p-5 sm:p-6" aria-labelledby="location-search-heading">
+      <PanelHead
+        id="location-search-heading"
+        icon={MapPin}
+        title="Where are you growing?"
+        description="Search a city, parish or address. Every tool starts from this location."
+      />
 
-      <form className="mt-5" onSubmit={handleSubmit}>
+      <div className="mt-5">
         <label htmlFor="workspace-location-search" className="sr-only">
           Search for a location
         </label>
-        <div className="flex flex-col gap-2 rounded-2xl border border-[#dfe7dc] bg-[#f8faf6] p-2 transition-shadow focus-within:ring-2 focus-within:ring-[#2f7044] focus-within:ring-offset-2 sm:flex-row sm:items-center">
-          <div className="flex min-w-0 flex-1 items-center gap-2.5 px-2">
-            <Search
-              size={17}
-              className="shrink-0 text-[#778878]"
-              aria-hidden="true"
-            />
-            <Input
-              id="workspace-location-search"
-              type="search"
-              autoComplete="off"
-              placeholder="Enter a location"
-              value={query}
-              onChange={(event) => {
-                setQuery(event.target.value);
-                if (status) setStatus("");
-              }}
-              className="h-11 min-w-0 border-0 bg-transparent px-0 text-sm shadow-none placeholder:text-[#9aa49a] focus-visible:ring-0"
-            />
-          </div>
-          <Button
-            type="submit"
-            disabled={!query.trim()}
-            className="h-11 rounded-xl bg-[#1f5032] px-5 text-sm font-semibold text-white hover:bg-[#163d26] disabled:opacity-50"
-          >
-            Search <ArrowRight data-icon="inline-end" />
-          </Button>
-        </div>
-      </form>
-
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-1 text-[11px]">
-        <p className="text-[#828d82]">
-          {location ? (
-            <>
-              Current location:{" "}
-              <span className="font-semibold text-[#345c3c]">{location}</span>
-            </>
-          ) : (
-            "No location selected yet."
+        <SearchField
+          id="workspace-location-search"
+          value={query}
+          onChange={(value) => {
+            setQuery(value);
+            if (status !== "loading") setStatus("idle");
+          }}
+          onSubmit={() => void search()}
+          loading={status === "loading"}
+          placeholder="e.g. Baton Rouge, Louisiana"
+        />
+        {results.length > 0 && (
+          <ResultList label="Matching locations">
+            {results.map((item) => (
+              <ResultItem key={`${item.lat}-${item.lon}-${item.label}`} onSelect={() => choose(item)} primary={item.label} />
+            ))}
+          </ResultList>
+        )}
+        <div role="status" aria-live="polite">
+          {status === "short" && <HelpText>Enter at least 3 characters.</HelpText>}
+          {status === "saved" && <HelpText tone="good">Location saved. The other tools will start here.</HelpText>}
+          {(status === "empty" || status === "error") && (
+            <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-2">
+              <HelpText tone={status === "error" ? "error" : "mute"} className="mt-0">
+                {status === "empty"
+                  ? "No matches. Try a nearby city or add the state."
+                  : "Location lookup is unavailable right now."}
+              </HelpText>
+              <button type="button" onClick={saveTyped} className={buttonClass({ variant: "ghost", size: "sm" })}>
+                Save “{query.trim()}” without a map
+              </button>
+            </div>
           )}
-        </p>
-        <p role="status" aria-live="polite" className="text-[#2e6d42]">
-          {status}
-        </p>
+        </div>
       </div>
-    </section>
+
+      <div className="mt-5">
+        {location && coordinates ? (
+          <LocationMap
+            lat={coordinates.lat}
+            lon={coordinates.lon}
+            label={location}
+            className="h-[260px]"
+          />
+        ) : (
+          <div className="flex h-[150px] flex-col items-center justify-center gap-1 rounded-[12px] border border-dashed border-[#c8cfc0] bg-paper px-4 text-center">
+            <p className="text-[14px] font-semibold text-ink-soft">
+              {location ? location : "No location saved yet"}
+            </p>
+            <p className="text-[13px] text-ink-mute">
+              {location ? "Saved without coordinates. Search to add it to the map." : "Search above to see it on the map."}
+            </p>
+          </div>
+        )}
+        {location && coordinates && (
+          <p className="mt-2.5 text-[13.5px] text-ink-soft">
+            <span className="font-semibold text-ink">Saved:</span> {location}
+          </p>
+        )}
+      </div>
+    </Panel>
   );
 }

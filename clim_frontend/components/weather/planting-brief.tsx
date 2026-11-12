@@ -10,8 +10,8 @@ export function PlantingBrief({ context }: { context: unknown }) {
       bodyKey="context"
       payload={context}
       cacheNamespace="planting"
-      label="Generative brief · OpenUI"
-      title="Your planting window, laid out as a dashboard"
+      label="OpenUI"
+      title="Planting brief"
     />
   );
 }

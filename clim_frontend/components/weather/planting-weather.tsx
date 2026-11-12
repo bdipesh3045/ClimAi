@@ -1,21 +1,51 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Bar,
   BarChart,
   CartesianGrid,
   Line,
   LineChart,
-  ReferenceLine,
+  ReferenceArea,
   ResponsiveContainer,
   Tooltip,
   XAxis,
   YAxis,
 } from "recharts";
-import { CalendarDays, Droplets, MapPin, Search, ThermometerSun } from "lucide-react";
+import { CalendarDays, CloudRain, CloudSun, Info, MapPin, ThermometerSun, X } from "lucide-react";
 import { PageIntro } from "@/components/shared/page-intro";
 import { PlantingBrief } from "@/components/weather/planting-brief";
+import { useAppData } from "@/components/providers/app-data-provider";
+import { LocationMap } from "@/components/shared/location-map";
+import { SearchField } from "@/components/shared/search-field";
+import {
+  Field,
+  HelpText,
+  Panel,
+  PanelHead,
+  Pill,
+  ResultItem,
+  ResultList,
+  Segmented,
+  Skeleton,
+  SourceNote,
+  SowChart,
+  Spec,
+  SpecGrid,
+  StateBlock,
+  buttonClass,
+  selectClass,
+  type SowState,
+} from "@/components/shared/ui-kit";
+import {
+  ChartLegend,
+  axisTick,
+  chartInk,
+  tooltipLabelStyle,
+  tooltipStyle,
+} from "@/components/charts/chart-kit";
+import { cn } from "@/lib/utils";
 
 // ---------------------------------------------------------------------------
 // Planting & weather — presentation only.
@@ -86,6 +116,13 @@ type Plan = {
 
 type LookupStatus = "idle" | "loading" | "done" | "empty" | "error" | "short";
 
+function sowState(month: MonthRow): SowState {
+  if (month.temp === null) return "unknown";
+  if (month.inWindow) return "window";
+  if (month.tempSuitable) return "suitable";
+  return "off";
+}
+
 export function PlantingWeather() {
   const [locationQuery, setLocationQuery] = useState("");
   const [location, setLocation] = useState<LocationResult | null>(null);
@@ -103,6 +140,20 @@ export function PlantingWeather() {
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
   const [errorMessage, setErrorMessage] = useState("");
   const [result, setResult] = useState<Plan | null>(null);
+
+  // --- Shared workspace location: start from it, and keep it in step ---
+  const {
+    location: savedLocation,
+    coordinates: savedCoordinates,
+    setLocation: setSavedLocation,
+  } = useAppData();
+  const prefilled = useRef(false);
+  useEffect(() => {
+    if (prefilled.current || location || !savedLocation || !savedCoordinates) return;
+    prefilled.current = true;
+    setLocation({ label: savedLocation, lat: savedCoordinates.lat, lon: savedCoordinates.lon });
+    setLocationQuery(savedLocation);
+  }, [location, savedLocation, savedCoordinates]);
 
   async function searchLocation() {
     const query = locationQuery.trim();
@@ -161,6 +212,8 @@ export function PlantingWeather() {
     setLocationQuery(item.label);
     setLocationResults([]);
     setLocationStatus("idle");
+    prefilled.current = true;
+    setSavedLocation(item.label, { lat: item.lat, lon: item.lon });
   }
 
   function chooseCrop(item: CropResult) {
@@ -219,404 +272,471 @@ export function PlantingWeather() {
     if (result) void fetchPlan(next);
   }
 
+  const isLoading = status === "loading";
+
   return (
     <div>
       <PageIntro
-        eyebrow="Plan with the season"
-        title="Find a planting window backed by real climate data."
-        description="Search a location and a crop. The window is derived from NASA POWER monthly normals checked against the FAO ECOCROP optimum for that crop — no sample data."
+        title="When should this crop go in the ground?"
+        description="Pick a location and a crop. The planting window is derived from NASA POWER monthly normals checked against the crop’s FAO ECOCROP optimum. No sample data."
       />
 
-      <section
-        className="mb-6 rounded-2xl border border-[#e7ebe5] bg-white p-4 sm:p-5"
-        aria-label="Planting search"
-      >
-        <div className="grid gap-4 lg:grid-cols-2">
-          <div>
-            <label
-              htmlFor="planting-location"
-              className="mb-1.5 block text-xs font-semibold text-[#42564a]"
-            >
-              Location
-            </label>
-            <div className="flex items-center gap-2 rounded-xl border border-[#dfe8df] bg-[#f9fbf9] px-3 py-2.5">
-              <Search size={15} className="shrink-0 text-[#4d6858]" />
-              <input
+      <div className="grid items-start gap-6 xl:grid-cols-[380px_minmax(0,1fr)]">
+        {/* ------------------------------------------------ controls */}
+        <Panel
+          aria-label="Planting search"
+          className="animate-rise p-5 xl:sticky xl:top-[88px] xl:max-h-[calc(100dvh-112px)] xl:overflow-y-auto"
+        >
+          <div className="flex flex-col gap-5">
+            <Field label="Location" htmlFor="planting-location">
+              <SearchField
                 id="planting-location"
-                type="text"
-                autoComplete="off"
-                placeholder="City, region, or address (US)"
                 value={locationQuery}
-                onChange={(event) => {
-                  setLocationQuery(event.target.value);
+                onChange={(value) => {
+                  setLocationQuery(value);
                   setLocation(null);
                   setLocationResults([]);
                   setLocationStatus("idle");
                 }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void searchLocation();
-                  }
-                }}
-                className="w-full border-0 bg-transparent text-sm text-[#1e2d29] placeholder:text-[#8c9a92] focus:outline-none"
+                onSubmit={() => void searchLocation()}
+                loading={locationStatus === "loading"}
+                placeholder="City, parish or address"
               />
-              <button
-                type="button"
-                onClick={() => void searchLocation()}
-                disabled={locationStatus === "loading"}
-                className="shrink-0 rounded-full bg-[#1b4d35] px-3 py-1.5 text-xs font-semibold text-white disabled:opacity-60"
-              >
-                {locationStatus === "loading" ? "Searching…" : "Search"}
-              </button>
-            </div>
-            {location ? (
-              <p className="mt-2 flex items-start gap-1.5 text-xs leading-5 text-[#52645a]">
-                <MapPin size={13} className="mt-0.5 shrink-0" />
-                <span>
-                  {location.label}
-                  <span className="text-[#7c857e]">
-                    {" "}
-                    ({location.lat.toFixed(4)}, {location.lon.toFixed(4)})
+              {location ? (
+                <HelpText tone="good" className="flex items-start gap-1.5">
+                  <MapPin size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
+                  <span>
+                    Using {location.label}
+                    <span className="tabular text-ink-mute">
+                      {" "}
+                      ({location.lat.toFixed(4)}, {location.lon.toFixed(4)})
+                    </span>
                   </span>
-                </span>
-              </p>
-            ) : locationResults.length > 0 ? (
-              <div className="mt-2 flex max-h-40 flex-col gap-1 overflow-y-auto rounded-xl border border-[#dfe8df] bg-white p-1.5 text-xs">
-                {locationResults.map((item) => (
-                  <button
-                    key={`${item.lat}-${item.lon}-${item.label}`}
-                    type="button"
-                    onClick={() => chooseLocation(item)}
-                    className="rounded-lg px-2 py-1.5 text-left text-[#35463a] hover:bg-[#eef4ee]"
-                  >
-                    {item.label}
-                  </button>
-                ))}
-              </div>
-            ) : (
-              <p className="mt-2 text-xs text-[#7c857e]">
-                {locationStatus === "empty"
-                  ? "No matches. Try a nearby city or add the state."
-                  : locationStatus === "short"
-                    ? "Enter at least 3 characters."
-                    : locationStatus === "error"
-                      ? "Location search failed. Check that the backend is running."
-                      : "Type a location and press Search, then pick a result."}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="crop-search" className="mb-1.5 block text-xs font-semibold text-[#42564a]">
-              Crop (search the FAO ECOCROP database)
-            </label>
-            <div className="flex items-center gap-2 rounded-xl border border-[#dfe8df] bg-[#f9fbf9] px-3 py-2.5">
-              <Search size={15} className="shrink-0 text-[#4d6858]" />
-              <input
-                id="crop-search"
-                type="text"
-                autoComplete="off"
-                placeholder="Search any crop — e.g. rice, maize, cotton"
-                value={cropQuery}
-                onChange={(event) => setCropQuery(event.target.value)}
-                className="w-full border-0 bg-transparent text-sm text-[#1e2d29] placeholder:text-[#8c9a92] focus:outline-none"
-              />
-              {cropQuery && (
-                <button
-                  type="button"
-                  onClick={() => setCropQuery("")}
-                  aria-label="Clear crop search"
-                  className="shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold text-[#4a594f] hover:bg-[#eef4ee]"
-                >
-                  ✕
-                </button>
-              )}
-            </div>
-
-            {crop && (
-              <div className="mt-2 flex flex-wrap gap-2" aria-label="Selected crop">
-                <button
-                  type="button"
-                  onClick={() => setCrop(null)}
-                  title={`Remove ${crop.name}`}
-                  className="rounded-full border border-[#1d4d31] bg-[#1b4d35] px-3 py-1.5 text-xs font-semibold text-white"
-                >
-                  {crop.name} ✕
-                </button>
-              </div>
-            )}
-
-            <div className="mt-2 text-xs" aria-live="polite">
-              {cropStatus === "loading" && <p className="text-[#7c857e]">Searching ECOCROP…</p>}
-              {cropStatus === "error" && (
-                <p className="text-[#a33c32]">Crop search failed. Check that the backend is running.</p>
-              )}
-              {cropStatus === "empty" && <p className="text-[#7c857e]">No crops match that name.</p>}
-              {cropStatus === "done" && cropResults.length > 0 && (
-                <div className="flex max-h-48 flex-col gap-1 overflow-y-auto rounded-xl border border-[#dfe8df] bg-white p-1.5">
-                  {cropResults.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      onClick={() => chooseCrop(item)}
-                      className="rounded-lg px-2 py-1.5 text-left text-[#35463a] hover:bg-[#eef4ee]"
-                    >
-                      <span className="font-semibold">{item.name}</span>
-                      <span className="text-[#7c857e]"> · {item.scientificName}</span>
-                      <span className="block text-[10px] text-[#8a9389]">
-                        ECOCROP optimum {item.tempOptimalC[0]}–{item.tempOptimalC[1]}°C
-                        {item.rainOptimalMmYear
-                          ? ` · ${item.rainOptimalMmYear[0]}–${item.rainOptimalMmYear[1]} mm/yr`
-                          : ""}
-                      </span>
-                    </button>
+                </HelpText>
+              ) : locationResults.length > 0 ? (
+                <ResultList label="Matching locations">
+                  {locationResults.map((item) => (
+                    <ResultItem
+                      key={`${item.lat}-${item.lon}-${item.label}`}
+                      onSelect={() => chooseLocation(item)}
+                      primary={item.label}
+                    />
                   ))}
+                </ResultList>
+              ) : (
+                <HelpText tone={locationStatus === "error" ? "error" : "mute"}>
+                  {locationStatus === "empty"
+                    ? "No matches. Try a nearby city or add the state."
+                    : locationStatus === "short"
+                      ? "Enter at least 3 characters."
+                      : locationStatus === "error"
+                        ? "Location search failed. Check that the backend is running."
+                        : "Type a location and press Search, then pick a result."}
+                </HelpText>
+              )}
+            </Field>
+
+            <Field label="Crop" htmlFor="crop-search">
+              <SearchField
+                id="crop-search"
+                value={cropQuery}
+                onChange={setCropQuery}
+                onClear={() => setCropQuery("")}
+                loading={cropStatus === "loading"}
+                placeholder="Search FAO ECOCROP: rice, maize, cotton…"
+              />
+              {crop && (
+                <div className="mt-2.5" aria-label="Selected crop">
+                  <button
+                    type="button"
+                    onClick={() => setCrop(null)}
+                    aria-label={`Remove ${crop.name}`}
+                    className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-forest pr-2.5 pl-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-forest-deep"
+                  >
+                    {crop.name}
+                    <X size={14} className="opacity-70 group-hover:opacity-100" aria-hidden="true" />
+                  </button>
                 </div>
               )}
-            </div>
-          </div>
-        </div>
+              <div aria-live="polite">
+                {cropStatus === "loading" && <HelpText>Searching ECOCROP…</HelpText>}
+                {cropStatus === "error" && (
+                  <HelpText tone="error">Crop search failed. Check that the backend is running.</HelpText>
+                )}
+                {cropStatus === "empty" && <HelpText>No crops match that name.</HelpText>}
+                {cropStatus === "done" && cropResults.length > 0 && (
+                  <ResultList label="Matching crops">
+                    {cropResults.map((item) => (
+                      <ResultItem
+                        key={item.id}
+                        onSelect={() => chooseCrop(item)}
+                        primary={item.name}
+                        secondary={<em>{item.scientificName}</em>}
+                        meta={
+                          <>
+                            ECOCROP optimum {item.tempOptimalC[0]}–{item.tempOptimalC[1]}°C
+                            {item.rainOptimalMmYear
+                              ? ` · ${item.rainOptimalMmYear[0]}–${item.rainOptimalMmYear[1]} mm/yr`
+                              : ""}
+                          </>
+                        }
+                      />
+                    ))}
+                  </ResultList>
+                )}
+              </div>
+            </Field>
 
-        <div className="mt-4 flex flex-wrap items-end justify-between gap-3 border-t border-[#eef2ec] pt-4">
-          <div className="flex flex-wrap items-center gap-4">
-            <label className="flex items-center gap-2 text-xs font-semibold text-[#42564a]">
-              Baseline
-              <select
-                value={baselineSpan}
-                onChange={(event) => setBaselineSpan(Number(event.target.value))}
-                className="rounded-lg border border-[#dfe8df] bg-white px-2 py-1.5 text-xs font-medium text-[#1e2d29]"
-              >
-                <option value={1}>Last year</option>
-                <option value={3}>Last 3 years</option>
-                <option value={5}>Last 5 years</option>
-              </select>
-            </label>
-            <div className="flex items-center gap-1 rounded-full border border-[#dfe8df] bg-white p-1">
-              {(["imperial", "metric"] as const).map((option) => (
-                <button
-                  key={option}
-                  type="button"
-                  onClick={() => changeUnits(option)}
-                  aria-pressed={units === option}
-                  className={`rounded-full px-2.5 py-1 text-[11px] font-semibold ${
-                    units === option ? "bg-[#1b4d35] text-white" : "text-[#4a594f]"
-                  }`}
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Climate baseline" htmlFor="planting-baseline">
+                <select
+                  id="planting-baseline"
+                  value={baselineSpan}
+                  onChange={(event) => setBaselineSpan(Number(event.target.value))}
+                  className={selectClass}
                 >
-                  {option === "imperial" ? "°F / in" : "°C / mm"}
-                </button>
-              ))}
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={() => void fetchPlan()}
-            disabled={status === "loading"}
-            className="rounded-full bg-[#1b4d35] px-4 py-2 text-xs font-semibold text-white disabled:opacity-60"
-          >
-            {status === "loading" ? "Fetching climate data…" : "Find planting window"}
-          </button>
-        </div>
-
-        {status === "error" && (
-          <p role="alert" className="mt-3 rounded-xl bg-[#fdf0ed] px-3 py-2 text-xs leading-5 text-[#a33c32]">
-            {errorMessage}
-          </p>
-        )}
-      </section>
-
-      {status === "success" && result && (
-        <div className="space-y-5">
-          <PlantingBrief
-            key={`${result.location.label}-${result.crop.scientificName}-${result.units}-${result.baseline.label}`}
-            context={result}
-          />
-
-          <section className="rounded-2xl border border-[#e7ebe5] bg-white p-5 sm:p-6">
-            <div className="flex flex-wrap items-start justify-between gap-4">
+                  <option value={1}>Last year</option>
+                  <option value={3}>Last 3 years</option>
+                  <option value={5}>Last 5 years</option>
+                </select>
+              </Field>
               <div>
-                <p className="text-[10px] font-semibold tracking-[0.14em] text-[#8a9389] uppercase">
-                  Derived from {result.baseline.label} normals
-                </p>
-                <h2 className="mt-1 font-heading text-xl font-bold text-[#23372b]">
-                  {result.crop.name} · {result.window.label}
-                </h2>
-                <p className="mt-1 text-xs leading-5 text-[#6f7c72]">
-                  {result.crop.scientificName}
-                  {result.crop.lifeForm ? ` · ${result.crop.lifeForm}` : ""} ·{" "}
-                  {result.location.label}
-                </p>
+                <p className="mb-1.5 text-[13px] font-semibold text-ink-soft">Units</p>
+                <Segmented<Units>
+                  ariaLabel="Units"
+                  className="w-full"
+                  value={units}
+                  onChange={changeUnits}
+                  options={[
+                    { value: "imperial", label: "°F / in" },
+                    { value: "metric", label: "°C / mm" },
+                  ]}
+                />
               </div>
-              <span className="rounded-full bg-[#eaf4f7] px-3 py-1.5 text-[10px] font-semibold text-[#3f6c78]">
-                {result.suitability.verdict}
-              </span>
             </div>
 
-            <div className="mt-5 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-              <Stat
-                label="Planting window"
-                value={result.window.label}
-                hint={`${result.window.monthNames.length} month${result.window.monthNames.length === 1 ? "" : "s"}`}
-                icon={CalendarDays}
-              />
-              <Stat
-                label="Suitable months"
-                value={`${result.suitability.suitableMonths} of 12`}
-                hint="Mean temp inside ECOCROP optimum"
-                icon={ThermometerSun}
-              />
-              <Stat
-                label="Annual rainfall"
-                value={result.rainfall.annual}
-                hint={`ECOCROP ${result.crop.rainOptimal}`}
-                icon={Droplets}
-              />
-              <Stat
-                label="Optimal temperature"
-                value={result.crop.tempOptimal}
-                hint="ECOCROP growing range"
-                icon={ThermometerSun}
-              />
-            </div>
-          </section>
-
-          <div className="grid gap-5 xl:grid-cols-2">
-            <section className="rounded-2xl border border-[#e7ebe5] bg-white p-5">
-              <h3 className="font-heading text-base font-bold text-[#23372b]">
-                Monthly mean temperature
-              </h3>
-              <p className="mt-1 text-[11px] text-[#7c857e]">
-                Green band is the crop&rsquo;s ECOCROP optimum ({result.crop.tempOptimal}).
-              </p>
-              <div className="mt-4 h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={result.charts.temperature} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                    <CartesianGrid stroke="#eef2ec" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#7c857e" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "#7c857e" }} axisLine={false} tickLine={false} />
-                    <Tooltip
-                      formatter={(value) => [`${value} ${result.charts.tempUnit}`, "Mean"]}
-                      contentStyle={{ fontSize: 11, borderRadius: 10, borderColor: "#dfe8df" }}
-                    />
-                    <ReferenceLine
-                      y={result.charts.temperature[0]?.optimalLow}
-                      stroke="#8fbf92"
-                      strokeDasharray="4 4"
-                      label={{ value: "optimum low", position: "insideBottomLeft", fontSize: 9, fill: "#5f8365" }}
-                    />
-                    <ReferenceLine
-                      y={result.charts.temperature[0]?.optimalHigh}
-                      stroke="#398253"
-                      strokeDasharray="4 4"
-                      label={{ value: "optimum high", position: "insideTopLeft", fontSize: 9, fill: "#2f6b42" }}
-                    />
-                    <Line
-                      type="monotone"
-                      dataKey="value"
-                      stroke="#1b4d35"
-                      strokeWidth={2.2}
-                      dot={{ r: 2.4, fill: "#1b4d35" }}
-                      connectNulls
-                    />
-                  </LineChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
-
-            <section className="rounded-2xl border border-[#e7ebe5] bg-white p-5">
-              <h3 className="font-heading text-base font-bold text-[#23372b]">Monthly rainfall</h3>
-              <p className="mt-1 text-[11px] text-[#7c857e]">
-                Monthly totals from the same {result.baseline.label} normals.
-              </p>
-              <div className="mt-4 h-56">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={result.charts.rainfall} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
-                    <CartesianGrid stroke="#eef2ec" vertical={false} />
-                    <XAxis dataKey="month" tick={{ fontSize: 10, fill: "#7c857e" }} axisLine={false} tickLine={false} />
-                    <YAxis tick={{ fontSize: 10, fill: "#7c857e" }} axisLine={false} tickLine={false} />
-                    <Tooltip
-                      formatter={(value) => [`${value} ${result.charts.rainUnit}`, "Rain"]}
-                      contentStyle={{ fontSize: 11, borderRadius: 10, borderColor: "#dfe8df" }}
-                    />
-                    <Bar dataKey="value" fill="#8fb9c4" radius={[3, 3, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </section>
+            <button
+              type="button"
+              onClick={() => void fetchPlan()}
+              disabled={isLoading}
+              className={buttonClass({ size: "lg", className: "w-full" })}
+            >
+              {isLoading ? "Fetching climate data…" : "Find planting window"}
+            </button>
           </div>
+        </Panel>
 
-          <section className="rounded-2xl border border-[#e7ebe5] bg-white p-5" aria-label="Month by month suitability">
-            <h3 className="font-heading text-base font-bold text-[#23372b]">Month by month</h3>
-            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-6">
-              {result.months.map((month) => (
-                <div
-                  key={month.month}
-                  className={`rounded-xl border p-3 ${
-                    month.inWindow
-                      ? "border-[#398253] bg-[#eef6ee]"
-                      : month.tempSuitable
-                        ? "border-[#bcd6bd] bg-[#f6faf5]"
-                        : "border-[#e7ebe5] bg-[#fbfcfa]"
-                  }`}
-                >
-                  <p className="text-[10px] font-semibold tracking-[0.1em] text-[#6f7c72] uppercase">
-                    {month.month}
-                  </p>
-                  <p className="mt-1 font-heading text-sm font-bold text-[#23372b]">
-                    {month.tempDisplay}
-                  </p>
-                  <p className="mt-0.5 text-[10px] text-[#7c857e]">{month.rainDisplay}</p>
-                  <p
-                    className={`mt-1.5 text-[10px] font-semibold ${
-                      month.tempSuitable ? "text-[#2f6b42]" : "text-[#8a9389]"
-                    }`}
-                  >
-                    {month.tempSuitable ? "Suitable" : "Outside range"}
-                  </p>
+        {/* ------------------------------------------------ readout */}
+        <div className="min-w-0 space-y-6">
+          {status === "idle" && (
+            <StateBlock kind="empty" icon={CloudSun} title="No planting window yet" className="animate-rise">
+              Choose a location and a crop, then press Find planting window. You will get a month-by-month
+              sowing chart, the crop’s ECOCROP ranges and the local climate normals behind them.
+            </StateBlock>
+          )}
+
+          {isLoading && (
+            <div role="status" aria-live="polite" className="space-y-6">
+              <span className="sr-only">Fetching NASA POWER climate normals and ECOCROP requirements.</span>
+              <Panel tone="readout" className="p-5 sm:p-6">
+                <Skeleton className="h-7 w-1/3" />
+                <Skeleton className="mt-2.5 h-4 w-1/2" />
+                <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+                  <div className="grid grid-cols-2 gap-3">
+                    {[0, 1, 2, 3].map((index) => (
+                      <Skeleton key={index} className="h-[104px]" />
+                    ))}
+                  </div>
+                  <Skeleton className="min-h-[224px]" />
                 </div>
-              ))}
+                <Skeleton className="mt-6 h-[80px]" />
+              </Panel>
+              <p className="text-[13.5px] text-ink-mute">
+                Fetching NASA POWER monthly normals and the crop’s ECOCROP ranges…
+              </p>
             </div>
-          </section>
+          )}
 
-          <section className="rounded-2xl border border-dashed border-[#d8e2d5] bg-[#fbfcf9] p-5">
-            <h3 className="text-sm font-semibold text-[#23372b]">How this window was derived</h3>
-            <ul className="mt-2 flex flex-col gap-1.5">
-              {result.notes.map((note) => (
-                <li key={note} className="text-xs leading-5 text-[#6f7c72]">
-                  {note}
-                </li>
-              ))}
-            </ul>
-            <p className="mt-3 text-[10px] leading-4 text-[#8a9389]">
-              Sources: {result.sources.observed}; {result.sources.requirements}; {" "}
-              {result.sources.geocoding}. Generated {result.generatedAt}.
-            </p>
-          </section>
+          {status === "error" && (
+            <StateBlock
+              kind="error"
+              title="Could not build the planting window"
+              action={
+                <button
+                  type="button"
+                  onClick={() => void fetchPlan()}
+                  className={buttonClass({ variant: "danger", size: "sm" })}
+                >
+                  Try again
+                </button>
+              }
+            >
+              {errorMessage}
+            </StateBlock>
+          )}
+
+          {status === "success" && result && (
+            <>
+              <Panel tone="readout" className="animate-rise p-5 sm:p-6" aria-labelledby="plan-heading">
+                <div className="flex flex-wrap items-start justify-between gap-3">
+                  <div className="min-w-0">
+                    <h2 id="plan-heading" className="font-display text-[28px] leading-[1.1] text-ink">
+                      {result.crop.name}
+                    </h2>
+                    <p className="mt-1.5 text-[14px] text-ink-mute">
+                      <em>{result.crop.scientificName}</em>
+                      {result.crop.lifeForm ? ` · ${result.crop.lifeForm}` : ""} ·{" "}
+                      {result.location.label.split(",").slice(0, 2).join(",")}
+                    </p>
+                  </div>
+                  <Pill tone={result.window.months.length > 0 ? "good" : "warn"} className="py-1.5 text-[13px] whitespace-normal">
+                    {result.suitability.verdict}
+                  </Pill>
+                </div>
+
+                <div className="mt-5 grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,0.9fr)]">
+                  <SpecGrid columns={2}>
+                    <Spec
+                      label="Planting window"
+                      icon={CalendarDays}
+                      tone="forest"
+                      value={result.window.label}
+                      note={`${result.window.monthNames.length} month${result.window.monthNames.length === 1 ? "" : "s"}`}
+                    />
+                    <Spec
+                      label="Suitable months"
+                      icon={ThermometerSun}
+                      value={`${result.suitability.suitableMonths} of 12`}
+                      note="Mean temperature inside the ECOCROP optimum"
+                    />
+                    <Spec
+                      label="Annual rainfall"
+                      icon={CloudRain}
+                      tone="sow"
+                      value={result.rainfall.annual}
+                      note={`ECOCROP ${result.crop.rainOptimal}`}
+                    />
+                    <Spec
+                      label="Optimal temperature"
+                      icon={ThermometerSun}
+                      tone="clay"
+                      value={result.crop.tempOptimal}
+                      note="ECOCROP growing range"
+                    />
+                  </SpecGrid>
+                  <LocationMap
+                    lat={result.location.lat}
+                    lon={result.location.lon}
+                    label={result.location.label}
+                    className="min-h-[224px]"
+                  />
+                </div>
+
+                <SowChart
+                  className="mt-6"
+                  legend={{
+                    window: "Planting window",
+                    suitable: "Temperature suitable",
+                    off: "Outside range",
+                    ...(result.months.some((month) => month.temp === null)
+                      ? { unknown: "No data" }
+                      : {}),
+                  }}
+                  months={result.months.map((month) => ({
+                    state: sowState(month),
+                    detail: `${month.tempDisplay}, ${month.rainDisplay}`,
+                  }))}
+                />
+
+                <div className="mt-5 grid gap-3 border-t border-line-soft pt-4 text-[14.5px] leading-[1.6] text-ink-soft md:grid-cols-2">
+                  <p>{result.suitability.summary}</p>
+                  <p>{result.rainfall.summary}</p>
+                </div>
+              </Panel>
+
+              <section className="grid gap-6 2xl:grid-cols-2" aria-label="Climate normals">
+                <Panel className="p-5 sm:p-6" aria-labelledby="plan-temp-heading">
+                  <PanelHead
+                    id="plan-temp-heading"
+                    icon={ThermometerSun}
+                    title="Monthly mean temperature"
+                    description={`${result.baseline.label} normals against the ECOCROP optimum (${result.crop.tempOptimal}).`}
+                  />
+                  <ChartLegend
+                    className="mt-4"
+                    items={[
+                      { label: "Mean temperature", color: chartInk.heat },
+                      { label: "ECOCROP optimum", color: chartInk.band, kind: "band" },
+                    ]}
+                  />
+                  <div className="mt-3 h-60">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={result.charts.temperature} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                        <CartesianGrid stroke={chartInk.grid} vertical={false} />
+                        {result.charts.temperature[0] && (
+                          <ReferenceArea
+                            y1={result.charts.temperature[0].optimalLow}
+                            y2={result.charts.temperature[0].optimalHigh}
+                            fill={chartInk.band}
+                            fillOpacity={0.12}
+                            stroke="none"
+                            ifOverflow="extendDomain"
+                          />
+                        )}
+                        <XAxis dataKey="month" tick={axisTick} axisLine={false} tickLine={false} tickMargin={10} />
+                        <YAxis tick={axisTick} axisLine={false} tickLine={false} width={44} domain={["auto", "auto"]} />
+                        <Tooltip
+                          contentStyle={tooltipStyle}
+                          labelStyle={tooltipLabelStyle}
+                          formatter={(value) => [`${value} ${result.charts.tempUnit}`, "Mean"]}
+                        />
+                        <Line
+                          type="monotone"
+                          dataKey="value"
+                          stroke={chartInk.heat}
+                          strokeWidth={2.5}
+                          dot={{ r: 3, fill: chartInk.heat }}
+                          activeDot={{ r: 4.5 }}
+                          connectNulls
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Panel>
+
+                <Panel className="p-5 sm:p-6" aria-labelledby="plan-rain-heading">
+                  <PanelHead
+                    id="plan-rain-heading"
+                    icon={CloudRain}
+                    title="Monthly rainfall"
+                    description={`Monthly totals from the same ${result.baseline.label} normals.`}
+                  />
+                  <ChartLegend
+                    className="mt-4"
+                    items={[{ label: `Rainfall (${result.charts.rainUnit})`, color: chartInk.rain, kind: "bar" }]}
+                  />
+                  <div className="mt-3 h-60">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={result.charts.rainfall} margin={{ top: 8, right: 12, left: 0, bottom: 0 }}>
+                        <CartesianGrid stroke={chartInk.grid} vertical={false} />
+                        <XAxis dataKey="month" tick={axisTick} axisLine={false} tickLine={false} tickMargin={10} />
+                        <YAxis tick={axisTick} axisLine={false} tickLine={false} width={44} />
+                        <Tooltip
+                          cursor={{ fill: "rgb(30 74 48 / 0.06)" }}
+                          contentStyle={tooltipStyle}
+                          labelStyle={tooltipLabelStyle}
+                          formatter={(value) => [`${value} ${result.charts.rainUnit}`, "Rain"]}
+                        />
+                        <Bar dataKey="value" fill={chartInk.rain} radius={[3, 3, 0, 0]} maxBarSize={22} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </Panel>
+              </section>
+
+              <Panel className="overflow-hidden" aria-labelledby="month-table-heading">
+                <div className="p-5 pb-4 sm:p-6 sm:pb-4">
+                  <PanelHead
+                    id="month-table-heading"
+                    icon={CalendarDays}
+                    title="Month by month"
+                    description="Climate normals for each month and whether the mean temperature sits inside the crop’s optimum."
+                  />
+                </div>
+                <div className="overflow-x-auto border-t border-line">
+                  <table className="w-full min-w-[660px] text-left text-[13px]">
+                    <thead className="bg-paper text-[12.5px] text-ink-mute">
+                      <tr>
+                        <th scope="col" className="sticky left-0 bg-paper px-4 py-2.5 font-semibold">
+                          <span className="sr-only">Measure</span>
+                        </th>
+                        {result.months.map((month) => (
+                          <th
+                            key={month.month}
+                            scope="col"
+                            className={cn(
+                              "px-1 py-2.5 text-center font-semibold",
+                              month.inWindow && "bg-forest-tint text-forest",
+                            )}
+                          >
+                            {month.month}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody className="tabular divide-y divide-line-soft">
+                      <tr>
+                        <th scope="row" className="sticky left-0 bg-panel px-4 py-3 whitespace-nowrap font-semibold text-ink-soft">
+                          Mean temp
+                        </th>
+                        {result.months.map((month) => (
+                          <td
+                            key={month.month}
+                            className={cn("px-1 py-3 text-center text-ink", month.inWindow && "bg-forest-tint/50")}
+                          >
+                            {month.tempDisplay}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <th scope="row" className="sticky left-0 bg-panel px-4 py-3 whitespace-nowrap font-semibold text-ink-soft">
+                          Rainfall
+                        </th>
+                        {result.months.map((month) => (
+                          <td
+                            key={month.month}
+                            className={cn("px-1 py-3 text-center text-sow", month.inWindow && "bg-forest-tint/50")}
+                          >
+                            {month.rainDisplay}
+                          </td>
+                        ))}
+                      </tr>
+                      <tr>
+                        <th scope="row" className="sticky left-0 bg-panel px-4 py-3 whitespace-nowrap font-semibold text-ink-soft">
+                          Temperature
+                        </th>
+                        {result.months.map((month) => (
+                          <td
+                            key={month.month}
+                            className={cn("px-1 py-3 text-center", month.inWindow && "bg-forest-tint/50")}
+                          >
+                            <span
+                              className={cn(
+                                "text-[12.5px] font-semibold",
+                                month.tempSuitable ? "text-forest" : "text-ink-mute",
+                              )}
+                            >
+                              {month.tempSuitable ? "Suitable" : "Outside"}
+                            </span>
+                          </td>
+                        ))}
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </Panel>
+
+              <PlantingBrief
+                key={`${result.location.label}-${result.crop.scientificName}-${result.units}-${result.baseline.label}`}
+                context={result}
+              />
+
+              <Panel tone="quiet" className="border border-line p-5 sm:p-6" aria-labelledby="derived-heading">
+                <PanelHead id="derived-heading" icon={Info} title="How this window was derived" />
+                <ul className="mt-3 list-disc space-y-1.5 pl-5 text-[14px] leading-[1.6] text-ink-soft marker:text-ink-mute">
+                  {result.notes.map((note) => (
+                    <li key={note}>{note}</li>
+                  ))}
+                </ul>
+                <SourceNote className="mt-4">
+                  Sources: {result.sources.observed}; {result.sources.requirements};{" "}
+                  {result.sources.geocoding}. Generated {result.generatedAt}.
+                </SourceNote>
+              </Panel>
+            </>
+          )}
         </div>
-      )}
-    </div>
-  );
-}
-
-function Stat({
-  label,
-  value,
-  hint,
-  icon: Icon,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  icon: typeof Droplets;
-}) {
-  return (
-    <div className="rounded-xl bg-[#f8faf8] p-3.5">
-      <p className="flex items-center gap-1.5 text-[10px] font-semibold tracking-[0.08em] text-[#7c857e] uppercase">
-        <Icon size={12} />
-        {label}
-      </p>
-      <p className="mt-1.5 font-heading text-lg font-bold text-[#23372b]">{value}</p>
-      <p className="mt-0.5 text-[10px] text-[#8a9389]">{hint}</p>
+      </div>
     </div>
   );
 }
