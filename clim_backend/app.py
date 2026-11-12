@@ -3,7 +3,7 @@ import json
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 
-from services import season
+from services import planting, season
 from services.crops import catalog_source, search_crops
 
 app = Flask(__name__)
@@ -94,7 +94,11 @@ def season_compare():
         return jsonify({"error": "Request body must be a JSON object."}), 400
 
     location = payload.get("location")
-    if not isinstance(location, dict) or location.get("lat") is None or location.get("lon") is None:
+    if (
+        not isinstance(location, dict)
+        or location.get("lat") is None
+        or location.get("lon") is None
+    ):
         return jsonify({"error": "location with lat and lon is required."}), 400
 
     crops = payload.get("crops") or []
@@ -107,14 +111,28 @@ def season_compare():
         window_start = int(payload.get("windowStart", 3))
         window_end = int(payload.get("windowEnd", 8))
     except (TypeError, ValueError):
-        return jsonify({"error": "previousYear, baselineSpan, windowStart and windowEnd must be integers."}), 400
+        return (
+            jsonify(
+                {
+                    "error": "previousYear, baselineSpan, windowStart and windowEnd must be integers."
+                }
+            ),
+            400,
+        )
 
     if baseline_span not in (1, 3, 5):
         return jsonify({"error": "baselineSpan must be 1, 3 or 5."}), 400
     if not (0 <= window_start <= 11 and 0 <= window_end <= 11):
-        return jsonify({"error": "windowStart and windowEnd must be month indices 0-11."}), 400
+        return (
+            jsonify({"error": "windowStart and windowEnd must be month indices 0-11."}),
+            400,
+        )
 
-    units = payload.get("units") if payload.get("units") in ("imperial", "metric") else "imperial"
+    units = (
+        payload.get("units")
+        if payload.get("units") in ("imperial", "metric")
+        else "imperial"
+    )
 
     try:
         result = season.compare(
@@ -131,6 +149,55 @@ def season_compare():
         return jsonify({"error": str(exc)}), 502
     except Exception as exc:  # noqa: BLE001 - surface unexpected upstream issues
         return jsonify({"error": f"Comparison failed: {exc}"}), 502
+
+    return jsonify(result), 200
+
+
+@app.route("/api/planting/plan", methods=["POST"])
+def planting_plan():
+    """Derive a planting window from real climate normals and ECOCROP."""
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Request body must be a JSON object."}), 400
+
+    location = payload.get("location")
+    if (
+        not isinstance(location, dict)
+        or location.get("lat") is None
+        or location.get("lon") is None
+    ):
+        return jsonify({"error": "location with lat and lon is required."}), 400
+
+    crop = payload.get("crop")
+    if not isinstance(crop, dict) or not (
+        crop.get("name") or crop.get("scientificName")
+    ):
+        return jsonify({"error": "Search for and select a crop first."}), 400
+
+    try:
+        span = int(payload.get("baselineSpan", 3))
+    except (TypeError, ValueError):
+        return jsonify({"error": "baselineSpan must be an integer."}), 400
+    if span not in (1, 3, 5):
+        return jsonify({"error": "baselineSpan must be 1, 3 or 5."}), 400
+
+    units = (
+        payload.get("units")
+        if payload.get("units") in ("imperial", "metric")
+        else "imperial"
+    )
+
+    try:
+        result = planting.plan(
+            location=location,
+            crop=crop,
+            span=span,
+            units=units,
+        )
+    except planting.PlantingError as exc:
+        return jsonify({"error": str(exc)}), 400
+    except Exception as exc:  # noqa: BLE001 - surface unexpected upstream issues
+        return jsonify({"error": f"Planting plan failed: {exc}"}), 502
 
     return jsonify(result), 200
 

@@ -23,7 +23,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { SeasonBrief } from "@/components/seasons/season-brief";
 import { PageIntro } from "@/components/shared/page-intro";
 
 // ---------------------------------------------------------------------------
@@ -764,11 +763,6 @@ export function SeasonComparison() {
 
       {result && status === "success" && (
         <div className="space-y-5">
-          <SeasonBrief
-            key={`${result.generatedAt}-${result.location.label}-${result.units}-${result.window.label}`}
-            comparison={result}
-          />
-
           <section className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4" aria-label="Season overview">
             <div className="rounded-2xl border border-[#e7ebe5] bg-white p-4">
               <p className="flex items-center gap-1.5 text-[11px] font-semibold text-[#69806b]">
@@ -778,7 +772,8 @@ export function SeasonComparison() {
                 {result.overview.tempShift.display}
               </p>
               <p className="mt-1 text-[11px] leading-4 text-[#7e877e]">
-                Outlook vs {result.baseline.label}, {result.window.label} window
+                Outlook vs {result.baseline.label} · {result.outlook.windowMonthsAvailable} of{" "}
+                {result.outlook.windowMonthsTotal} {result.window.label} months have outlook data
               </p>
             </div>
             <div className="rounded-2xl border border-[#e7ebe5] bg-white p-4">
@@ -789,7 +784,8 @@ export function SeasonComparison() {
                 {result.overview.rainShift.display}
               </p>
               <p className="mt-1 text-[11px] leading-4 text-[#7e877e]">
-                Outlook vs {result.baseline.label}, {result.window.label} window
+                Outlook vs {result.baseline.label} · {result.outlook.windowMonthsAvailable} of{" "}
+                {result.outlook.windowMonthsTotal} {result.window.label} months have outlook data
               </p>
             </div>
             <div className="rounded-2xl border border-[#e7ebe5] bg-white p-4">
@@ -908,6 +904,11 @@ export function SeasonComparison() {
               <p className="mt-3 text-[11px] text-[#7e877e]">
                 Source: NASA POWER (observed {result.baseline.label}) · Open-Meteo seasonal outlook ({result.outlook.label}).
               </p>
+              <p className="mt-1 text-[11px] leading-4 text-[#9aa39a]">
+                Outlook values exist only for months the seasonal model covers
+                ({result.outlook.range ? `${result.outlook.range.start} → ${result.outlook.range.end}` : "unavailable"}).
+                Months outside that horizon show observed baseline only.
+              </p>
               <p className="mt-1 text-xs font-medium leading-5 text-[#2c3a30]">{result.overview.tempSummary}</p>
             </div>
 
@@ -953,6 +954,11 @@ export function SeasonComparison() {
               </div>
               <p className="mt-3 text-[11px] text-[#7e877e]">
                 Source: NASA POWER (observed {result.baseline.label}) · Open-Meteo seasonal outlook ({result.outlook.label}).
+              </p>
+              <p className="mt-1 text-[11px] leading-4 text-[#9aa39a]">
+                Outlook values exist only for months the seasonal model covers
+                ({result.outlook.range ? `${result.outlook.range.start} → ${result.outlook.range.end}` : "unavailable"}).
+                Months outside that horizon show observed baseline only.
               </p>
               <p className="mt-1 text-xs font-medium leading-5 text-[#2c3a30]">{result.overview.rainSummary}</p>
             </div>

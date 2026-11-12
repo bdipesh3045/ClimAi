@@ -44,25 +44,24 @@ Structure the dashboard as one Stack with, in this order:
 Keep it dense and scannable: short labels, no filler sentences, no duplicated section titles.`;
 
 /**
- * Planting & weather page. Every value there is simulated demo data, so the
- * instruction spends its rules on not dressing them up as a real forecast.
+ * Planting & weather page: climatological normals checked against an ECOCROP
+ * optimum. The rules keep the model from presenting normals as a forecast.
  */
-export const PLANTING_BRIEF_INSTRUCTION = `Render one dashboard for a planting-calendar page from the DATA JSON below.
+export const PLANTING_BRIEF_INSTRUCTION = `Render one dashboard summarizing a planting-window analysis from the DATA JSON below.
 
 Rules:
 - Emit ONLY OpenUI Lang. No prose outside the program.
-- Every number, month, label and sentence must come from DATA, copied exactly as given. Never compute day counts, dates, growing-degree days or percentages, and never round differently.
-- DATA.currentConditions and DATA.sevenDayOutlook are SIMULATED demonstration values. Never call them a forecast, never imply they are live or measured, and never tell the reader what to do based on them.
-- Do not add advice, caveats or agronomic guidance of your own. The only advisory text you may show is DATA.typicalWindow.note and DATA.disclaimer, quoted as given.
-- If DATA.alerts is empty, say so once in a Callout and make clear no alert feed is connected. Do not invent warnings.
+- Every number, month, label and sentence must come from DATA, copied exactly as given. Never compute totals, averages, month counts or percentages, and never re-round a value.
+- DATA is real climatology (monthly normals) compared with FAO ECOCROP optimums. Never call it a forecast, a live measurement, or a prediction.
+- Do not add advice, caveats or agronomic guidance of your own. The only narrative text you may show is DATA.suitability.summary, DATA.rainfall.summary and the entries of DATA.notes, quoted as given.
+- Never invent a month, a crop, a range or a planting window. If DATA.window.monthNames is empty, show DATA.window.label exactly and say no window is claimed.
 
 Structure the dashboard as one Stack with, in this order:
-1. A CardHeader naming the crop, the year and the location, with a one-line subtitle giving DATA.typicalWindow.status and the start–end months.
-2. A four-item SnippetCardBlock: typical window start, typical window end, current temperature (mark it simulated), and recent rainfall (mark it simulated).
-3. A "Planting calendar" card with a TagBlock: one Tag per entry in DATA.calendar, success when inTypicalWindow is true and neutral when false, so the twelve months read as a strip.
-4. A Table of the seven-day outlook with columns Day, Sky, High, Low, and Rain chance, labelled as simulated.
-5. A Callout carrying DATA.typicalWindow.note as given.
-6. The alerts from DATA.alerts as a TagBlock, or the no-feed Callout described above.
-7. A final TextContent footnote quoting DATA.disclaimer.
+1. A CardHeader with DATA.crop.name and DATA.crop.scientificName, and a subtitle combining DATA.location.label with DATA.baseline.label.
+2. A four-item SnippetCardBlock: DATA.window.label as the planting window, DATA.suitability.suitableMonths plus " of 12" as suitable months, DATA.rainfall.annual as annual rainfall, and DATA.crop.tempOptimal as the optimal temperature range.
+3. A Table of DATA.months with columns Month, Mean temp, Rainfall, and In window, using tempDisplay, rainDisplay and the inWindow flag as Yes/No.
+4. A Callout carrying DATA.suitability.summary, then a second Callout carrying DATA.rainfall.summary.
+5. A card listing DATA.notes as short bullet lines, headed "How this window was derived".
+6. A final TextContent footnote naming DATA.sources.observed, DATA.sources.requirements and DATA.sources.geocoding.
 
 Keep it dense and scannable: short labels, no filler sentences, no duplicated section titles.`;
