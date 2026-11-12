@@ -122,14 +122,19 @@ cd climateai
 ### 2. Run the Backend
 
 ```bash
-cd backend
+cd clim_backend
 
 python -m venv venv
 source venv/bin/activate
 
 pip install -r requirements.txt
+export CLIMAI_SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')
 python app.py
 ```
+
+`CLIMAI_SECRET_KEY` signs the sign-in cookie, and the backend refuses to start without it (at least 32 characters). A new key on each start signs everyone out, which is fine locally. Keep one fixed key in a deployed environment. Accounts and profiles are stored in `clim_backend/climai.db`, created on first use. Set `CLIMAI_DB_PATH` to store them elsewhere. See `clim_backend/.env.example`.
+
+Start the backend with `python app.py` rather than `flask run`. Only `python app.py` turns off the `Secure` cookie flag for the plain-http dev server, and some browsers, Safari among them, will not keep the sign-in cookie without that.
 
 The Flask backend will run at:
 
@@ -140,7 +145,7 @@ The Flask backend will run at:
 Open another terminal:
 
 ```bash
-cd frontend
+cd clim_frontend
 
 npm install
 npm run dev
@@ -207,7 +212,7 @@ The response looks like this (one entry per crop, best first):
 }
 ```
 
-`level` is `Great fit` (80+), `Good fit` (60+), `Possible with care` (40+) or `Not recommended`. Harvest numbers are `null` for crops scoring under 40. `needs` holds the crop's ideal (`temp_c`, `rain_mm`, `ph`) and survival (`*_limit_*`) ranges from `crops.json`, in deg C and mm. `farm` echoes the inputs the scorer used. The Crop Finder page saves the response in `sessionStorage` and shows it on `/crop-finder/results`. Invalid input returns `400` and a failed climate lookup returns `502`, both as `{"error": "..."}`. Run the backend tests with `python -m unittest test_app` from `clim_backend`.
+`level` is `Great fit` (80+), `Good fit` (60+), `Possible with care` (40+) or `Not recommended`. Harvest numbers are `null` for crops scoring under 40. `needs` holds the crop's ideal (`temp_c`, `rain_mm`, `ph`) and survival (`*_limit_*`) ranges from `crops.json`, in deg C and mm. `farm` echoes the inputs the scorer used. The Crop Finder page saves the response in `sessionStorage` and shows it on `/crop-finder/results`. Invalid input returns `400` and a failed climate lookup returns `502`, both as `{"error": "..."}`. Run the backend tests with `python -m unittest test_app test_accounts` from `clim_backend`.
 
 The request body is JSON with this shape:
 
@@ -242,6 +247,40 @@ The request body is JSON with this shape:
 
 Restart the frontend after changing the environment variable. HTTP errors from the backend are shown in the form.
 `soilType` is `null` when not selected. When irrigation is unavailable, `irrigation.method` is `null`; when available, a delivery method is required. `otherNotes` is an optional trimmed string.
+
+### Accounts and Farm Profile
+
+Farmers sign up at `/signup` and sign in at `/login`. Every page except the landing page, `/login` and `/signup` needs a signed-in farmer. A guest is sent to `/login?next=<page>` and returns to that page after signing in. A farmer without a profile goes to `/profile` first. The profile stores name, optional phone and farm name, farm location, size, soil type, irrigation and current crops. The Crop Finder starts from these values.
+
+The browser calls `/backend/*` on the Next.js site, and `next.config.mjs` forwards those calls to Flask at `BACKEND_URL` (default `http://127.0.0.1:5001`). This keeps the sign-in cookie first-party, so the account routes need no CORS.
+
+| Method | Path | Body | Success |
+|--------|------|------|---------|
+| POST | `/api/auth/signup` | `{"email", "password"}` | `201 {"user", "profile": null}`, signs in |
+| POST | `/api/auth/login` | `{"email", "password"}` | `200 {"user", "profile"}`, signs in |
+| POST | `/api/auth/logout` | none | `204` |
+| GET | `/api/auth/me` | none | `200 {"user", "profile"}` |
+| PUT | `/api/profile` | profile fields | `200 {"profile"}` |
+
+Passwords must be 8 to 128 characters and are stored as scrypt hashes. Errors come back as `{"error": "..."}`: `400` for invalid input, `401` when not signed in or for a wrong email or password, `409` when the email is taken, and `429` after 10 failed sign-ins for one email within 15 minutes. That limit is kept in memory, so it resets when the backend restarts.
+
+The profile body uses the same shape the Crop Finder sends:
+
+```json
+{
+  "fullName": "Asha Patel",
+  "phone": "+1 515 555 0100",
+  "farmName": "Prairie Creek Farm",
+  "location": "Des Moines, Polk County, Iowa, United States",
+  "coordinates": { "lat": 41.6012, "lon": -93.6091 },
+  "farm": { "size": 40, "sizeUnit": "acres" },
+  "soilType": "Silt",
+  "irrigation": { "available": true, "method": "Drip" },
+  "currentCrops": ["Corn", "Soybeans"]
+}
+```
+
+`phone`, `farmName` and `soilType` may be `null`. The response adds `updatedAt`.
 
 ## Project Goal
 

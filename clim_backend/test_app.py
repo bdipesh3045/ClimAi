@@ -1,4 +1,8 @@
 """Tests for the crop recommendation API. Run from clim_backend: python -m unittest test_app"""
+import os
+
+os.environ.setdefault("CLIMAI_SECRET_KEY", "test-only-secret-key-0123456789abcdef")
+
 import http.client
 import io
 import json
