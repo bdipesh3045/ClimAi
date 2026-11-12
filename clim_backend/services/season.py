@@ -284,7 +284,9 @@ def compare(
     try:
         monthly_frames = [fetch_power_monthly(lat, lon, year) for year in prev_years]
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError) as exc:
-        raise SeasonError(f"NASA POWER request failed: {exc}") from exc
+        raise SeasonError(
+            "NASA POWER climate data is unavailable right now. Please try again."
+        ) from exc
 
     if not monthly_frames or not monthly_frames[-1]["t2m"]:
         raise SeasonError(

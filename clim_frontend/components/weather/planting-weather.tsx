@@ -134,7 +134,8 @@ export function PlantingWeather() {
   const [cropResults, setCropResults] = useState<CropResult[]>([]);
   const [cropStatus, setCropStatus] = useState<LookupStatus>("idle");
 
-  const [baselineSpan, setBaselineSpan] = useState(3);
+  // 30 = the NASA 30-year climate normal, the same baseline Crop Finder scores with.
+  const [baselineSpan, setBaselineSpan] = useState(30);
   const [units, setUnits] = useState<Units>("imperial");
 
   const [status, setStatus] = useState<"idle" | "loading" | "success" | "error">("idle");
@@ -388,13 +389,14 @@ export function PlantingWeather() {
             </Field>
 
             <div className="grid grid-cols-2 gap-3">
-              <Field label="Climate baseline" htmlFor="planting-baseline">
+              <Field label="Climate baseline" htmlFor="planting-baseline" hint="30-year normal matches Crop Finder.">
                 <select
                   id="planting-baseline"
                   value={baselineSpan}
                   onChange={(event) => setBaselineSpan(Number(event.target.value))}
                   className={selectClass}
                 >
+                  <option value={30}>30-year normal</option>
                   <option value={1}>Last year</option>
                   <option value={3}>Last 3 years</option>
                   <option value={5}>Last 5 years</option>

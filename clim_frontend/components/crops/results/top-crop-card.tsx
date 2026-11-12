@@ -1,172 +1,189 @@
-import Link from "next/link";
-import { CalendarDays, CircleAlert, CircleCheck, CircleX, Info, type LucideIcon } from "lucide-react";
+import { CalendarRange, CircleAlert, CircleCheck, CircleX, Info, Scale as ScaleIcon, Timer, type LucideIcon } from "lucide-react";
 
 import type { CropRecommendation, FarmInputs } from "@/lib/crop-analysis";
 import {
   allChecksPass,
   buildChecks,
   capitalize,
+  formatWeight,
+  rainCoverage,
+  shortMonth,
   summaryLine,
   TOTAL_CHECKS,
   type Check,
   type Scale,
-  type Tone,
+  type Tone as CheckTone,
 } from "@/lib/crop-insights";
+import { HelpText, Panel, Pill, SowChart, Spec, SpecGrid } from "@/components/shared/ui-kit";
+import { cn } from "@/lib/utils";
 
-import { CARD, EYEBROW, LevelBadge } from "./parts";
+import { CropIcon, LEVEL_TONE, seasonMonths } from "./parts";
 
-const TONES: Record<Tone, { icon: LucideIcon; iconClass: string; chip: string }> = {
-  good: { icon: CircleCheck, iconClass: "text-[#2f9a5a]", chip: "border-[#cfe8d6] bg-[#eaf6ee] text-[#1f6b3c]" },
-  fair: { icon: CircleAlert, iconClass: "text-[#d39424]", chip: "border-[#f1ddb0] bg-[#fdf5e2] text-[#8a5a10]" },
-  poor: { icon: CircleX, iconClass: "text-[#d0584a]", chip: "border-[#f1cdc7] bg-[#fbecea] text-[#a33c32]" },
-};
-const SCALE_COLORS: Record<Check["kind"], { band: string; marker: string; value: string }> = {
-  warmth: { band: "bg-[#bfe6cc]", marker: "bg-[#2f7a4b]", value: "text-[#1f2d27]" },
-  water: { band: "bg-[#c9def4]", marker: "bg-[#2f6fb0]", value: "text-[#2f6fb0]" },
-  soil: { band: "bg-[#e6ebe4]", marker: "bg-[#4b6b55]", value: "text-[#1f2d27]" },
+const CHECK_TONE: Record<CheckTone, { icon: LucideIcon; iconClass: string; pill: "good" | "warn" | "bad" }> = {
+  good: { icon: CircleCheck, iconClass: "text-forest-mid", pill: "good" },
+  fair: { icon: CircleAlert, iconClass: "text-marigold-ink", pill: "warn" },
+  poor: { icon: CircleX, iconClass: "text-clay", pill: "bad" },
 };
 
-function ScoreRing({ score }: { score: number }) {
-  return (
-    <div className="relative size-[68px] shrink-0" aria-hidden="true">
-      <svg viewBox="0 0 68 68" className="size-full -rotate-90">
-        <circle cx="34" cy="34" r="28" fill="none" stroke="#e3ece5" strokeWidth="6" />
-        <circle cx="34" cy="34" r="28" fill="none" stroke="#2f7a4b" strokeWidth="6" strokeLinecap="round" pathLength={100} strokeDasharray={`${score} 100`} />
-      </svg>
-      <span className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-[18px] leading-none font-extrabold text-[#172720]">{score}</span>
-        <span className="text-[8px] font-semibold tracking-[0.1em] text-[#8a948c] uppercase">Score</span>
-      </span>
-    </div>
-  );
-}
+const SCALE_INK: Record<Check["kind"], { band: string; marker: string; value: string }> = {
+  warmth: { band: "bg-clay/20", marker: "bg-clay", value: "text-clay" },
+  water: { band: "bg-sow/20", marker: "bg-sow", value: "text-sow" },
+  soil: { band: "bg-forest/15", marker: "bg-forest", value: "text-forest" },
+};
 
-function SeasonTimeline({ rec }: { rec: CropRecommendation }) {
+/** Where this land sits against the crop's best and tolerable range. */
+function RangeBar({ scale, kind }: { scale: Scale; kind: Check["kind"] }) {
+  const ink = SCALE_INK[kind];
   return (
-    <div className="mt-6 flex flex-col gap-3 rounded-[16px] border border-[#f1e3b5] bg-[#fdf9ec] p-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex items-start gap-3">
-        <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#f8ecc6] text-[#a8740f]">
-          <CalendarDays aria-hidden="true" className="size-5" />
-        </span>
-        <div>
-          <p className="text-[11px] font-bold tracking-[0.12em] text-[#a8740f] uppercase">Season timeline</p>
-          <p className="mt-0.5 text-[14px] font-medium text-[#2b2a1f]">
-            {rec.plantMonth && rec.harvestMonth
-              ? `Best time to plant: around ${rec.plantMonth}. Ready to harvest: around ${rec.harvestMonth}.`
-              : "Grows year-round once planted, with no single best planting month."}
-          </p>
-        </div>
-      </div>
-      <span className="self-start rounded-full border border-[#ecdcae] bg-white px-3 py-1 text-[12px] whitespace-nowrap text-[#6b6340] sm:self-center">
-        <b className="text-[#a8740f]">~{rec.seasonDays} days</b> to harvest
-      </span>
-    </div>
-  );
-}
-
-function ScaleBar({ scale, kind }: { scale: Scale; kind: Check["kind"] }) {
-  const colors = SCALE_COLORS[kind];
-  return (
-    <div className="mt-3 border-t border-[#eef1ec] pt-3" aria-hidden="true">
-      <div className="flex justify-between gap-2 text-[11px] text-[#7a857d]">
-        <span>{scale.lowLabel}</span>
-        <span className={`font-semibold ${colors.value}`}>{scale.valueLabel}</span>
-        <span>{scale.highLabel}</span>
-      </div>
-      <div className="relative mt-2 h-2 rounded-full bg-[#eef1ec]">
+    <div className="mt-3 max-w-[560px]" aria-hidden="true">
+      <div className="relative h-2.5 rounded-full bg-line-soft">
         <span
-          className={`absolute inset-y-0 rounded-full ${colors.band}`}
+          className={cn("absolute inset-y-0 rounded-full", ink.band)}
           style={{ left: `${scale.bestStart}%`, width: `${scale.bestEnd - scale.bestStart}%` }}
         />
         <span
-          className={`absolute top-1/2 size-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white shadow ${colors.marker}`}
+          className={cn("absolute top-1/2 size-4 -translate-x-1/2 -translate-y-1/2 rounded-full border-[3px] border-white shadow-[0_1px_3px_rgb(18_48_31/0.35)]", ink.marker)}
           style={{ left: `${scale.marker}%` }}
         />
+      </div>
+      <div className="tabular mt-1.5 flex justify-between gap-2 text-[12.5px] text-ink-mute">
+        <span>{scale.lowLabel}</span>
+        <span className={cn("font-semibold", ink.value)}>{scale.valueLabel}</span>
+        <span>{scale.highLabel}</span>
       </div>
     </div>
   );
 }
 
-function CheckItem({ check }: { check: Check }) {
-  const tone = TONES[check.tone];
+function CheckRow({ check, rec }: { check: Check; rec: CropRecommendation }) {
+  const tone = CHECK_TONE[check.tone];
   const Icon = tone.icon;
   return (
-    <li className="rounded-[16px] border border-[#e6ebe4] p-4">
-      <div className="flex items-start gap-3">
-        <Icon aria-hidden="true" className={`mt-0.5 size-5 shrink-0 ${tone.iconClass}`} />
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h5 className="text-[14px] font-bold text-[#1f2d27]">{check.name}</h5>
-            <span className={`rounded-md border px-2 py-0.5 text-[11px] font-medium ${tone.chip}`}>{check.status}</span>
-          </div>
-          <p className="mt-1 text-[13px] leading-6 text-[#4f5d53]">{check.text}</p>
-          {check.scale && <ScaleBar scale={check.scale} kind={check.kind} />}
-        </div>
+    <li className="grid gap-x-4 gap-y-1 py-4 first:pt-0 last:pb-0 sm:grid-cols-[170px_minmax(0,1fr)]">
+      <div className="flex items-center gap-2 sm:block">
+        <p className="flex items-center gap-2 font-heading text-[15px] font-bold text-ink">
+          <Icon aria-hidden="true" className={cn("size-[18px] shrink-0", tone.iconClass)} />
+          {check.name.replace(/ check$/, "")}
+        </p>
+        <Pill tone={tone.pill} className="sm:mt-2">
+          {check.status}
+        </Pill>
+      </div>
+      <div className="min-w-0">
+        <p className="text-[14.5px] leading-[1.6] text-ink-soft">{check.text}</p>
+        {check.scale && <RangeBar scale={check.scale} kind={check.kind} />}
+        {check.kind === "water" && (
+          <p className="mt-2 text-[13px] text-ink-mute">
+            Rain alone covers <span className="tabular font-semibold text-sow">{rainCoverage(rec)}%</span> of the
+            minimum it needs.
+          </p>
+        )}
       </div>
     </li>
   );
 }
 
+function harvestFigure(rec: CropRecommendation, acres: number | null) {
+  if (rec.harvestLbTotal !== null && acres !== null) {
+    return { value: formatWeight(rec.harvestLbTotal), note: `of ${rec.harvestWhat} on ${acres.toLocaleString("en-US")} acres` };
+  }
+  if (rec.harvestLbPerAcre !== null) {
+    return { value: formatWeight(rec.harvestLbPerAcre), note: `of ${rec.harvestWhat} per acre` };
+  }
+  return { value: "Not estimated", note: "Fit too weak to project a yield" };
+}
+
+/** The answer: the best-matching crop, laid out like the back of a seed packet. */
 export function TopCropCard({ rec, farm }: { rec: CropRecommendation; farm: FarmInputs }) {
   const checks = buildChecks(rec, farm);
   const checkedCount = Object.keys(rec.factors).length;
-  const SummaryIcon = allChecksPass(rec) ? CircleCheck : CircleAlert;
+  const harvest = harvestFigure(rec, farm.acres);
+  const season =
+    rec.plantMonth && rec.harvestMonth ? `${shortMonth(rec.plantMonth)} → ${shortMonth(rec.harvestMonth)}` : "Year-round";
+
   return (
-    <article className={`${CARD} overflow-hidden`}>
-      <div aria-hidden="true" className="h-1.5 bg-gradient-to-r from-[#8edcab] to-[#2f7a4b]" />
-      <div className="p-5 sm:p-7">
-        <header className="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+    <Panel tone="readout" as="article" className="animate-rise p-5 sm:p-7" aria-labelledby="top-crop-heading">
+      <header className="flex flex-col gap-5 sm:flex-row sm:items-start sm:justify-between">
+        <div className="flex min-w-0 items-start gap-4">
+          <CropIcon category={rec.category} size="lg" />
           <div className="min-w-0">
-            <div className="flex flex-wrap items-center gap-3">
-              <span aria-hidden="true" className="text-[40px] leading-none">{rec.emoji}</span>
-              <h3 className="font-heading text-[30px] font-extrabold tracking-[-0.03em] text-[#172720]">{rec.crop}</h3>
-              <LevelBadge level={rec.level} />
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <h2 id="top-crop-heading" className="font-display text-[clamp(1.9rem,3.2vw,2.6rem)] leading-[1.05] text-ink">
+                {rec.crop}
+              </h2>
+              <Pill tone={LEVEL_TONE[rec.level]}>{rec.level}</Pill>
             </div>
-            <p className="mt-1 text-[13px] text-[#6b776e]">
+            <p className="mt-1.5 text-[14.5px] text-ink-mute">
               {capitalize(rec.category)} · grown for {rec.harvestWhat}
             </p>
-            <p className="mt-3 inline-flex items-start gap-2 rounded-full border border-[#cfe5d6] bg-[#f1f8f3] px-3 py-1.5 text-[12px] font-medium text-[#1d4d31]">
-              <SummaryIcon aria-hidden="true" className="mt-px size-4 shrink-0" />
+            <p className="mt-3 flex items-start gap-2 text-[14.5px] font-semibold text-forest">
+              {allChecksPass(rec) ? (
+                <CircleCheck aria-hidden="true" className="mt-0.5 size-[18px] shrink-0" />
+              ) : (
+                <CircleAlert aria-hidden="true" className="mt-0.5 size-[18px] shrink-0 text-marigold-ink" />
+              )}
               {summaryLine(rec)}
             </p>
           </div>
-          <div className="flex shrink-0 items-center gap-4 rounded-[16px] border border-[#e6ebe4] bg-[#fafbf9] p-4">
-            <ScoreRing score={rec.score} />
-            <div className="text-[12px]">
-              <p className="text-[13px] font-semibold text-[#1f2d27]">{rec.score} out of 100</p>
-              <p className="text-[#6b776e]">based on {checkedCount} of {TOTAL_CHECKS} checks</p>
-              <p className="mt-1 font-semibold text-[#2f7a4b]">Top recommendation</p>
-            </div>
-          </div>
-        </header>
+        </div>
+        <div className="shrink-0 sm:text-right">
+          <p className="tabular font-display text-[52px] leading-none text-forest">
+            {rec.score}
+            <span className="text-[20px] text-ink-mute">/100</span>
+          </p>
+          <p className="mt-1.5 text-[13px] text-ink-mute">
+            Match score · {checkedCount} of {TOTAL_CHECKS} checks
+          </p>
+        </div>
+      </header>
 
-        <SeasonTimeline rec={rec} />
+      <SpecGrid className="mt-6">
+        <Spec label="Plant → harvest" icon={CalendarRange} tone="forest" value={season} />
+        <Spec label="Days to harvest" icon={Timer} value={`~${rec.seasonDays}`} />
+        <Spec
+          label="Expected harvest"
+          icon={ScaleIcon}
+          tone="marigold"
+          value={harvest.value}
+          note={harvest.note}
+        />
+        <Spec
+          label="Yield rate"
+          value={rec.harvestLbPerAcre === null ? "—" : formatWeight(rec.harvestLbPerAcre)}
+          note={rec.harvestLbPerAcre === null ? "Not estimated" : "per acre, good-year yield × match"}
+        />
+      </SpecGrid>
 
-        <section aria-labelledby="checks-heading" className="mt-7">
-          <h4 id="checks-heading" className={EYEBROW}>Checks against your land</h4>
-          <ul className="mt-3 space-y-3">
-            {checks.map((check) => (
-              <CheckItem key={check.kind} check={check} />
-            ))}
-          </ul>
-          {rec.missing.length > 0 && (
-            <p className="mt-3 flex items-start gap-2 rounded-[12px] border border-[#e6ebe4] bg-[#fafbf9] px-3 py-2.5 text-[12px] text-[#6b776e]">
-              <Info aria-hidden="true" className="mt-px size-4 shrink-0" />
-              {capitalize(rec.missing.join(" and "))} {rec.missing.length > 1 ? "are" : "is"} not checked yet.
-              Add soil details on the form for a sharper score.
-            </p>
-          )}
-        </section>
+      <SowChart
+        className="mt-6"
+        title="Growing season"
+        legend={
+          rec.plantMonth && rec.harvestMonth
+            ? { window: `Plant in ${rec.plantMonth}, harvest by ${rec.harvestMonth}`, off: "Off season" }
+            : { window: "Grows year-round once planted" }
+        }
+        months={seasonMonths(rec).map((state) => ({ state }))}
+      />
 
-        <footer className="mt-6 border-t border-[#eef1ec] pt-5">
-          <Link
-            href="/crop-finder"
-            className="inline-flex items-center rounded-full bg-[#2f7a4b] px-5 py-2.5 text-[13px] font-semibold text-white hover:bg-[#256540] focus-visible:ring-2 focus-visible:ring-[#2f7a4b] focus-visible:ring-offset-2"
-          >
-            Start a new analysis
-          </Link>
-        </footer>
-      </div>
-    </article>
+      <section aria-labelledby="checks-heading" className="mt-7 border-t border-line pt-6">
+        <h3 id="checks-heading" className="font-heading text-[17px] font-bold text-ink">
+          How it fits your land
+        </h3>
+        <ul className="mt-4 divide-y divide-line-soft">
+          {checks.map((check) => (
+            <CheckRow key={check.kind} check={check} rec={rec} />
+          ))}
+        </ul>
+        {rec.missing.length > 0 && (
+          <HelpText className="mt-4 flex items-start gap-2">
+            <Info aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+            <span>
+              {capitalize(rec.missing.join(" and "))} {rec.missing.length > 1 ? "are" : "is"} not checked yet. Add
+              soil details on the Crop Finder form for a sharper score.
+            </span>
+          </HelpText>
+        )}
+      </section>
+    </Panel>
   );
 }

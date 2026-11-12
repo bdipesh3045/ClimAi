@@ -1,100 +1,87 @@
-import type { LucideIcon } from "lucide-react";
+import {
+  Apple,
+  Bean,
+  Carrot,
+  Leaf,
+  Nut,
+  Salad,
+  Shirt,
+  Sprout,
+  Wheat,
+  type LucideIcon,
+} from "lucide-react";
 
-import type { CropFitLevel } from "@/lib/crop-analysis";
-import { shortMonth, MONTHS } from "@/lib/crop-insights";
+import type { CropFitLevel, CropRecommendation } from "@/lib/crop-analysis";
+import { MONTHS } from "@/lib/crop-insights";
+import type { SowState, Tone } from "@/components/shared/ui-kit";
+import { cn } from "@/lib/utils";
 
-export const CARD =
-  "rounded-[20px] border border-[#e6ebe4] bg-white shadow-[0_1px_2px_rgba(16,40,24,0.04)]";
-export const EYEBROW =
-  "text-[11px] font-semibold tracking-[0.12em] text-[#5f6d63] uppercase";
-
-const LEVEL_STYLES: Record<CropFitLevel, { badge: string; dot: string; bar: string }> = {
-  "Great fit": { badge: "border-[#cfe8d6] bg-[#eaf6ee] text-[#1f6b3c]", dot: "bg-[#2f9a5a]", bar: "bg-[#3aa564]" },
-  "Good fit": { badge: "border-[#e6e3b8] bg-[#f6f5e3] text-[#5d6417]", dot: "bg-[#9aa52b]", bar: "bg-[#a9b43a]" },
-  "Possible with care": { badge: "border-[#f1ddb0] bg-[#fdf5e2] text-[#8a5a10]", dot: "bg-[#e09a2a]", bar: "bg-[#eaa23a]" },
-  "Not recommended": { badge: "border-[#f1cdc7] bg-[#fbecea] text-[#a33c32]", dot: "bg-[#d0584a]", bar: "bg-[#d86a5c]" },
+/** Pill tone per fit level: solid green is reserved for the best fit. */
+export const LEVEL_TONE: Record<CropFitLevel, Tone> = {
+  "Great fit": "solid",
+  "Good fit": "good",
+  "Possible with care": "warn",
+  "Not recommended": "bad",
 };
 
-export const levelBarColor = (level: CropFitLevel) => LEVEL_STYLES[level].bar;
+/** Bar colour per fit level, for the ranked table and the distribution bar. */
+export const LEVEL_FILL: Record<CropFitLevel, string> = {
+  "Great fit": "bg-forest",
+  "Good fit": "bg-forest-mid/55",
+  "Possible with care": "bg-marigold",
+  "Not recommended": "bg-clay",
+};
 
-export function LevelBadge({ level }: { level: CropFitLevel }) {
-  const style = LEVEL_STYLES[level];
+const CATEGORY_ICONS: Record<string, LucideIcon> = {
+  cereal: Wheat,
+  legume: Bean,
+  vegetable: Salad,
+  "root and tuber": Carrot,
+  oilseed: Nut,
+  fruit: Apple,
+  forage: Leaf,
+  fiber: Shirt,
+  "cash crop": Sprout,
+};
+
+/** A drawn icon for the crop's category, in place of an emoji. */
+export function CropIcon({
+  category,
+  size = "md",
+  className,
+}: {
+  category: string;
+  size?: "sm" | "md" | "lg";
+  className?: string;
+}) {
+  const Icon = CATEGORY_ICONS[category] ?? Sprout;
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-[12px] font-semibold whitespace-nowrap ${style.badge}`}
+      aria-hidden="true"
+      className={cn(
+        "flex shrink-0 items-center justify-center rounded-[10px]",
+        size === "lg" && "size-14 rounded-[14px] bg-forest text-marigold",
+        size === "md" && "size-10 bg-forest-tint text-forest",
+        size === "sm" && "size-8 bg-forest-tint text-forest",
+        className,
+      )}
     >
-      <span aria-hidden="true" className={`size-1.5 rounded-full ${style.dot}`} />
-      {level}
+      <Icon size={size === "lg" ? 28 : size === "md" ? 19 : 16} strokeWidth={1.9} />
     </span>
   );
 }
 
-export function CardLabel({
-  icon: Icon,
-  iconClass,
-  children,
-  aside,
-}: {
-  icon: LucideIcon;
-  iconClass: string;
-  children: React.ReactNode;
-  aside?: React.ReactNode;
-}) {
-  return (
-    <div className="flex items-start justify-between gap-3">
-      <div className="flex items-center gap-2.5">
-        <span className={`flex size-8 items-center justify-center rounded-[10px] ${iconClass}`}>
-          <Icon aria-hidden="true" className="size-4" />
-        </span>
-        <h3 className="text-[12px] font-semibold tracking-[0.1em] text-[#3e4b42] uppercase">
-          {children}
-        </h3>
-      </div>
-      {aside}
-    </div>
-  );
-}
-
-export function Chip({ className, children }: { className: string; children: React.ReactNode }) {
-  return (
-    <span className={`inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium ${className}`}>
-      {children}
-    </span>
-  );
-}
-
-/** Twelve monthly bars, January first. Heights are relative to the year's range. */
-export function MonthBars({
-  values,
-  colorOf,
-  label,
-}: {
-  values: number[];
-  colorOf: (share: number) => string;
-  label: string;
-}) {
-  const low = Math.min(...values);
-  const span = Math.max(...values) - low || 1;
-  return (
-    <figure className="mt-auto pt-5">
-      <div role="img" aria-label={label} className="flex h-12 items-end gap-1.5">
-        {values.map((value, index) => {
-          const share = (value - low) / span;
-          return (
-            <span
-              key={MONTHS[index]}
-              title={`${MONTHS[index]}`}
-              className={`flex-1 rounded-[3px] ${colorOf(share)}`}
-              style={{ height: `${20 + share * 80}%` }}
-            />
-          );
-        })}
-      </div>
-      <figcaption aria-hidden="true" className="mt-1.5 flex justify-between text-[10px] text-[#9aa39c]">
-        <span>{shortMonth(MONTHS[0])}</span>
-        <span>{shortMonth(MONTHS[6])}</span>
-        <span>{shortMonth(MONTHS[11])}</span>
-      </figcaption>
-    </figure>
-  );
+/**
+ * The twelve months between planting and harvest, from the backend's month
+ * names. A crop with no planting month grows year-round.
+ */
+export function seasonMonths(rec: CropRecommendation): SowState[] {
+  if (!rec.plantMonth || !rec.harvestMonth) return MONTHS.map(() => "window");
+  const start = MONTHS.indexOf(rec.plantMonth);
+  const end = MONTHS.indexOf(rec.harvestMonth);
+  if (start < 0 || end < 0) return MONTHS.map(() => "unknown");
+  return MONTHS.map((_, index) => {
+    const inside = start <= end ? index >= start && index <= end : index >= start || index <= end;
+    return inside ? "window" : "off";
+  });
 }

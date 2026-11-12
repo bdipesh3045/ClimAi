@@ -4,41 +4,56 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  ArrowUpRight,
-  ChartNoAxesCombined,
   CloudSun,
-  Leaf,
+  LayoutGrid,
   ListChecks,
   LoaderCircle,
   LogOut,
+  MapPin,
   Menu,
   MessageCircle,
   Sprout,
   UserRound,
   Wheat,
   X,
+  type LucideIcon,
 } from "lucide-react";
-import { AppDataProvider } from "@/components/providers/app-data-provider";
+import { AppDataProvider, useAppData } from "@/components/providers/app-data-provider";
 import {
   AuthProvider,
   useAuth,
   type AuthState,
 } from "@/components/providers/auth-provider";
-import { Button } from "@/components/ui/button";
+import { buttonClass } from "@/components/shared/ui-kit";
 import { errorText } from "@/lib/api";
 import { cn } from "@/lib/utils";
 
 // Drawn without the app sidebar and open to guests. Every other page needs a signed-in farmer.
 const PUBLIC_PATHS = new Set(["/", "/login", "/signup"]);
 
-const navigation = [
-  { title: "Overview", href: "/dashboard", icon: ChartNoAxesCombined },
-  { title: "Crop Finder", href: "/crop-finder", icon: Sprout },
-  { title: "Season Comparison", href: "/season-comparison", icon: Wheat },
-  { title: "Improvement Plan", href: "/improvement-plan", icon: ListChecks },
-  { title: "Planting & Weather", href: "/planting-weather", icon: CloudSun },
-  { title: "AI Assistant", href: "/assistant", icon: MessageCircle },
-  { title: "Farm Profile", href: "/profile", icon: UserRound },
+type NavItem = { title: string; href: string; icon: LucideIcon };
+
+const navigation: Array<{ label: string | null; items: NavItem[] }> = [
+  { label: null, items: [{ title: "Overview", href: "/dashboard", icon: LayoutGrid }] },
+  {
+    label: "Analyze",
+    items: [
+      { title: "Season Comparison", href: "/season-comparison", icon: Wheat },
+      { title: "Planting & Weather", href: "/planting-weather", icon: CloudSun },
+      { title: "Crop Finder", href: "/crop-finder", icon: Sprout },
+    ],
+  },
+  {
+    label: "Act",
+    items: [
+      { title: "Improvement Plan", href: "/improvement-plan", icon: ListChecks },
+      { title: "AI Assistant", href: "/assistant", icon: MessageCircle },
+    ],
+  },
+  {
+    label: "Account",
+    items: [{ title: "Farm Profile", href: "/profile", icon: UserRound }],
+  },
 ];
 
 const pageTitles: Record<string, string> = {
@@ -62,10 +77,30 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   );
 }
 
+function Wordmark({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <Link
+      href="/"
+      aria-label="ClimateCrop AI home"
+      onClick={onNavigate}
+      className="flex items-center gap-2.5 rounded-[10px] px-2 py-1 focus-visible:outline-marigold"
+    >
+      <span className="flex size-9 items-center justify-center rounded-[10px] bg-marigold text-forest-deep">
+        <Sprout size={19} strokeWidth={2.1} aria-hidden="true" />
+      </span>
+      <span className="font-display text-[17px] leading-none text-white">
+        ClimateCrop
+        <span className="ml-1 text-marigold">AI</span>
+      </span>
+    </Link>
+  );
+}
+
 function ShellContent({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
   const { state } = useAuth();
+  const { location } = useAppData();
   const [mobileOpen, setMobileOpen] = useState(false);
   const isAssistantPage = pathname === "/assistant";
   const isPublicPage = PUBLIC_PATHS.has(pathname);
@@ -77,6 +112,17 @@ function ShellContent({ children }: { children: React.ReactNode }) {
     }
   }, [isPublicPage, pathname, router, state.status]);
 
+  // Close the drawer on route change and on Escape.
+  useEffect(() => setMobileOpen(false), [pathname]);
+  useEffect(() => {
+    if (!mobileOpen) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMobileOpen(false);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [mobileOpen]);
+
   if (isPublicPage) {
     return <>{children}</>;
   }
@@ -85,155 +131,126 @@ function ShellContent({ children }: { children: React.ReactNode }) {
   }
   const { account } = state;
 
-  const sidebar = (
-    <div className="flex h-full flex-col px-4 py-6">
-      <Link
-        href="/"
-        aria-label="ClimateAI home"
-        className="mb-10 flex items-center gap-3 px-3"
-        onClick={() => setMobileOpen(false)}
-      >
-        <span className="flex size-10 items-center justify-center rounded-2xl bg-[#17452d] text-white">
-          <Leaf size={20} strokeWidth={1.8} aria-hidden="true" />
-        </span>
-        <span className="font-heading text-[19px] font-extrabold tracking-[-0.04em] text-[#17452d]">
-          Climate<span className="text-[#398253]">AI</span>
-        </span>
-      </Link>
+  const rail = (
+    <div className="flex h-full flex-col overflow-y-auto px-3 py-5">
+      <div className="px-1">
+        <Wordmark onNavigate={() => setMobileOpen(false)} />
+      </div>
 
-      <p className="px-3 pb-3 text-[10px] font-bold tracking-[0.17em] text-[#9aa39a] uppercase">
-        Your workspace
-      </p>
-      <nav aria-label="Main navigation" className="flex flex-col gap-1">
-        {navigation.map(({ title, href, icon: Icon }) => {
-          const isActive = pathname === href || pathname.startsWith(`${href}/`);
-          return (
-            <Link
-              key={href}
-              href={href}
-              aria-current={isActive ? "page" : undefined}
-              onClick={() => setMobileOpen(false)}
-              className={cn(
-                "group flex min-h-11 items-center gap-3 rounded-xl px-3 text-[13px] font-medium transition-colors focus-visible:ring-2 focus-visible:ring-[#398253] focus-visible:ring-offset-2",
-                isActive
-                  ? "bg-[#eaf1e8] text-[#17452d]"
-                  : "text-[#69726a] hover:bg-[#f1f6ed] hover:text-[#17452d]",
-              )}
-            >
-              <Icon size={17} strokeWidth={1.8} aria-hidden="true" />
-              {title}
-              {isActive && (
-                <span
-                  className="ml-auto size-1.5 rounded-full bg-[#398253]"
-                  aria-hidden="true"
-                />
-              )}
-            </Link>
-          );
-        })}
+      <nav aria-label="Main navigation" className="mt-8 flex flex-col gap-6">
+        {navigation.map((group) => (
+          <div key={group.label ?? "home"}>
+            {group.label && (
+              <p className="px-3 pb-2 text-[12px] font-semibold text-white/80">{group.label}</p>
+            )}
+            <ul className="flex flex-col gap-0.5">
+              {group.items.map(({ title, href, icon: Icon }) => {
+                const isActive = pathname === href || pathname.startsWith(`${href}/`);
+                return (
+                  <li key={href}>
+                    <Link
+                      href={href}
+                      aria-current={isActive ? "page" : undefined}
+                      onClick={() => setMobileOpen(false)}
+                      className={cn(
+                        "group relative flex min-h-11 items-center gap-3 rounded-[10px] px-3 text-[14px] font-medium transition-colors focus-visible:outline-marigold",
+                        isActive
+                          ? "bg-white text-forest-deep"
+                          : "text-white/85 hover:bg-white/10 hover:text-white",
+                      )}
+                    >
+                      <Icon
+                        size={18}
+                        strokeWidth={1.9}
+                        aria-hidden="true"
+                        className={isActive ? "text-forest" : "text-white/70 group-hover:text-white"}
+                      />
+                      {title}
+                    </Link>
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        ))}
       </nav>
 
-      <div className="mt-auto rounded-2xl border border-[#e4eae1] bg-[#f7faf4] p-4">
-        <span className="mb-3 flex size-8 items-center justify-center rounded-xl bg-white text-[#398253]">
-          <Sprout size={16} aria-hidden="true" />
-        </span>
-        <p className="text-xs font-semibold text-[#27362a]">
-          A clearer growing season
+      <div className="mt-auto pt-6">
+        <AccountMenu email={account.user.email} name={account.profile?.fullName ?? null} />
+        <p className="mt-4 px-3 text-[12px] leading-[1.55] text-white/75">
+          Data: NASA POWER, Open-Meteo, FAO ECOCROP and OpenStreetMap.
         </p>
-        <p className="mt-1 text-[11px] leading-5 text-[#7b857b]">
-          Bring climate context and your own field notes together.
-        </p>
-        <Link
-          href="/improvement-plan"
-          className="mt-3 inline-flex items-center gap-1 text-[11px] font-semibold text-[#23603b] hover:underline"
-        >
-          View your plan <ArrowUpRight size={13} aria-hidden="true" />
-        </Link>
+        <p className="mt-1.5 px-3 text-[12px] text-white/75">ClimateCrop AI · TechXpo 2026</p>
       </div>
-      <AccountMenu
-        email={account.user.email}
-        name={account.profile?.fullName ?? null}
-      />
-      <p className="px-3 pt-5 text-[10px] text-[#9aa39a]">
-        ClimateAI · TechXpo 2026
-      </p>
     </div>
   );
 
   return (
-    <div className="min-h-screen bg-[#f8faf6] text-[#202720] lg:flex lg:h-dvh lg:min-h-0 lg:overflow-hidden">
+    <div className="min-h-screen bg-ground text-ink lg:flex lg:h-dvh lg:min-h-0 lg:overflow-hidden">
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-3 focus:top-3 focus:z-50 focus:rounded-lg focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-[#17452d] focus:shadow-lg"
+        className="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-[1000] focus:rounded-[10px] focus:bg-white focus:px-4 focus:py-2 focus:text-sm focus:font-semibold focus:text-forest focus:shadow-lg"
       >
         Skip to main content
       </a>
-      <aside className="sticky top-0 hidden h-dvh w-[252px] shrink-0 border-r border-[#e7ebe5] bg-[#fcfcf8] lg:flex">
-        {sidebar}
-      </aside>
+
+      <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 bg-forest lg:block">{rail}</aside>
 
       {mobileOpen && (
-        <>
+        <div className="fixed inset-0 z-[900] lg:hidden" role="dialog" aria-modal="true" aria-label="Navigation">
           <button
             type="button"
             aria-label="Close navigation"
-            className="fixed inset-0 z-40 bg-[#10291b]/35 lg:hidden"
+            className="absolute inset-0 animate-in bg-forest-deep/45 fade-in-0"
             onClick={() => setMobileOpen(false)}
           />
-          <aside className="fixed inset-y-0 left-0 z-50 w-[min(82vw,300px)] border-r border-[#e7ebe5] bg-[#fcfcf8] shadow-xl lg:hidden">
-            <div className="absolute top-5 right-4">
-              <Button
-                variant="ghost"
-                size="icon"
-                aria-label="Close menu"
-                onClick={() => setMobileOpen(false)}
-              >
-                <X />
-              </Button>
-            </div>
-            {sidebar}
+          <aside className="absolute inset-y-0 left-0 w-[min(84vw,290px)] animate-in bg-forest shadow-2xl duration-200 slide-in-from-left">
+            <button
+              type="button"
+              aria-label="Close menu"
+              onClick={() => setMobileOpen(false)}
+              className="absolute top-4 right-3 z-10 flex size-10 items-center justify-center rounded-[10px] text-white/80 hover:bg-white/10 hover:text-white"
+            >
+              <X size={20} aria-hidden="true" />
+            </button>
+            {rail}
           </aside>
-        </>
+        </div>
       )}
 
       <div className="min-h-0 min-w-0 flex-1 lg:h-dvh lg:overflow-y-auto lg:overscroll-contain">
-        <header className="sticky top-0 z-30 flex h-[74px] items-center justify-between border-b border-[#e7ebe5] bg-[#fcfcf8]/95 px-4 backdrop-blur-sm sm:px-7 lg:px-10">
-          <div className="flex items-center gap-3">
-            <Button
-              variant="ghost"
-              size="icon"
-              className="lg:hidden"
+        <header className="sticky top-0 z-[800] flex h-16 items-center justify-between gap-3 border-b border-line bg-ground/92 px-4 backdrop-blur-md sm:px-7 lg:px-10">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              className="-ml-1 flex size-10 items-center justify-center rounded-[10px] text-ink-soft hover:bg-line-soft lg:hidden"
               aria-label="Open navigation"
               aria-expanded={mobileOpen}
               onClick={() => setMobileOpen(true)}
             >
-              <Menu />
-            </Button>
-            <div>
-              <p className="hidden text-[10px] font-semibold tracking-[0.15em] text-[#869087] uppercase sm:block">
-                Climate intelligence
-              </p>
-              <p className="mt-0.5 text-sm font-semibold text-[#28352b]">
-                {pageTitles[pathname] ?? "ClimateAI"}
-              </p>
-            </div>
+              <Menu size={20} aria-hidden="true" />
+            </button>
+            <p className="truncate font-heading text-[15px] font-bold text-ink">
+              {pageTitles[pathname] ?? "ClimateCrop AI"}
+            </p>
           </div>
-          <div className="hidden items-center gap-2 text-[11px] text-[#858d85] sm:flex">
-            <span
-              className="size-1.5 rounded-full bg-[#a8c5a5]"
-              aria-hidden="true"
-            />
-            Demo workspace
-          </div>
+          <Link
+            href="/dashboard#location"
+            className="flex max-w-[55%] min-w-0 items-center gap-2 rounded-full border border-line bg-panel px-3 py-1.5 text-[13px] text-ink-soft transition-colors hover:border-forest-mid/40 hover:text-forest"
+            title={location ? `Saved location: ${location}` : "Set a location on the Overview page"}
+          >
+            <MapPin size={14} className="shrink-0 text-forest-mid" aria-hidden="true" />
+            <span className="truncate">
+              {location ? location.split(",").slice(0, 2).join(",") : "Set location"}
+            </span>
+          </Link>
         </header>
         <main
           id="main-content"
           tabIndex={-1}
           className={cn(
-            "mx-auto w-full max-w-[1440px] px-4 focus:outline-none sm:px-7 lg:px-10",
-            isAssistantPage
-              ? "h-[calc(100dvh-74px)] overflow-hidden py-3 sm:py-4"
-              : "py-7 sm:py-9 lg:py-10",
+            "mx-auto w-full max-w-[1320px] px-4 focus:outline-none sm:px-7 lg:px-10",
+            isAssistantPage ? "h-[calc(100dvh-64px)] overflow-hidden py-3 sm:py-4" : "py-7 sm:py-9 lg:py-10",
           )}
         >
           {children}
@@ -248,29 +265,19 @@ function AuthGate({ state }: { state: Exclude<AuthState, { status: "signed-in" }
   const { reload } = useAuth();
 
   return (
-    <main className="flex min-h-dvh items-center justify-center bg-[#f8faf6] px-4 text-[#202720]">
+    <main className="flex min-h-dvh items-center justify-center bg-ground px-4 text-ink">
       {state.status === "error" ? (
-        <div
-          role="alert"
-          className="max-w-sm rounded-2xl border border-[#e4eae1] bg-white p-6 text-center"
-        >
-          <p className="text-sm font-semibold text-[#27362a]">
-            We could not load your workspace
-          </p>
-          <p className="mt-2 text-[13px] leading-5 text-[#6b7a6e]">
-            {state.message}
-          </p>
-          <Button className="mt-4" onClick={() => void reload()}>
+        <div role="alert" className="max-w-sm rounded-[14px] border border-line bg-panel p-6 text-center">
+          <p className="font-heading text-[16px] font-bold text-ink">We could not load your workspace</p>
+          <p className="mt-2 text-[14px] leading-[1.55] text-ink-mute">{state.message}</p>
+          <button type="button" className={buttonClass({ className: "mt-4" })} onClick={() => void reload()}>
             Try again
-          </Button>
+          </button>
         </div>
       ) : (
-        <p
-          role="status"
-          className="flex items-center gap-2 text-sm text-[#6b7a6e]"
-        >
+        <p role="status" className="flex items-center gap-2 text-[14px] text-ink-mute">
           <LoaderCircle className="size-4 animate-spin" aria-hidden="true" />
-          Loading your workspace...
+          Loading your workspace…
         </p>
       )}
     </main>
@@ -294,24 +301,29 @@ function AccountMenu({ email, name }: { email: string; name: string | null }) {
   }
 
   return (
-    <div className="mt-4 rounded-2xl border border-[#e4eae1] bg-white p-3">
-      <p className="truncate text-xs font-semibold text-[#27362a]">
-        {name ?? "Signed in"}
-      </p>
-      <p className="truncate text-[11px] text-[#7b857b]" title={email}>
-        {email}
-      </p>
+    <div className="rounded-[12px] bg-forest-deep/60 p-3">
+      <div className="flex items-center gap-2.5">
+        <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-white/12 text-white">
+          <UserRound size={17} aria-hidden="true" />
+        </span>
+        <div className="min-w-0">
+          <p className="truncate text-[13.5px] font-semibold text-white">{name ?? "Signed in"}</p>
+          <p className="truncate text-[12px] text-white/75" title={email}>
+            {email}
+          </p>
+        </div>
+      </div>
       <button
         type="button"
         onClick={() => void handleSignOut()}
         disabled={isSigningOut}
-        className="mt-2 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-2 text-[12px] font-semibold text-[#23603b] hover:bg-[#f1f6ed] focus-visible:ring-2 focus-visible:ring-[#398253] disabled:opacity-60"
+        className="mt-2.5 inline-flex min-h-9 w-full items-center justify-center gap-1.5 rounded-[8px] text-[13px] font-semibold text-white/90 transition-colors hover:bg-white/10 hover:text-white focus-visible:outline-marigold disabled:opacity-60"
       >
-        <LogOut size={14} aria-hidden="true" />
-        {isSigningOut ? "Signing out..." : "Sign out"}
+        <LogOut size={15} aria-hidden="true" />
+        {isSigningOut ? "Signing out…" : "Sign out"}
       </button>
       {error && (
-        <p role="alert" className="mt-1 text-[11px] text-[#a33c32]">
+        <p role="alert" className="mt-1 text-[12px] text-[#ffd2c6]">
           {error}
         </p>
       )}

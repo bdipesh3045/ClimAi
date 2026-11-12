@@ -14,6 +14,7 @@ from __future__ import annotations
 import urllib.error
 from datetime import date
 
+from services.climate import CLIMATOLOGY_LABEL, ClimateUnavailable, fetch_monthly_climate
 from services.season import (
     MONTH_LENGTHS,
     MONTHS,
@@ -27,6 +28,10 @@ from services.season import (
 
 class PlantingError(Exception):
     """Raised when a required source or crop requirement is unavailable."""
+
+
+# Baseline span meaning "the 30-year climate normal", the same baseline Crop Finder scores with.
+NORMAL_SPAN = 30
 
 
 def _is_number(value) -> bool:
@@ -44,7 +49,7 @@ def _monthly_normals(lat: float, lon: float, years: list[int]) -> tuple[list, li
     try:
         frames = [fetch_power_monthly(lat, lon, year) for year in years]
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError) as exc:
-        raise PlantingError(f"NASA POWER request failed: {exc}") from exc
+        raise PlantingError("NASA POWER climate data is unavailable right now. Please try again.") from exc
 
     if not frames or not frames[-1]["t2m"]:
         raise PlantingError(
@@ -133,8 +138,23 @@ def plan(
         else (None, None)
     )
 
-    years = _baseline_years(span)
-    temps_c, rains_mm = _monthly_normals(lat, lon, years)
+    if span == NORMAL_SPAN:
+        # Same 30-year climatology and rounding as Crop Finder, so both pages agree.
+        years = []
+        try:
+            temp_tuple, rain_tuple = fetch_monthly_climate(round(lat, 2), round(lon, 2))
+        except ClimateUnavailable as exc:
+            raise PlantingError("NASA POWER climate data is unavailable right now. Please try again.") from exc
+        temps_c, rains_mm = list(temp_tuple), list(rain_tuple)
+        period = "30-year normal"
+        baseline_label = "30-year normal"
+        observed_source = CLIMATOLOGY_LABEL
+    else:
+        years = _baseline_years(span)
+        temps_c, rains_mm = _monthly_normals(lat, lon, years)
+        period = f"{years[0]}–{years[-1]} mean"
+        baseline_label = f"{years[0]}–{years[-1]} avg"
+        observed_source = "NASA POWER monthly normals (T2M, PRECTOTCORR)"
 
     flags: list[bool] = []
     months = []
@@ -200,7 +220,7 @@ def plan(
         verdict = "Temperature window found, rainfall range unavailable"
 
     summary = (
-        f"{suitable_count} of 12 months have a {years[0]}–{years[-1]} mean temperature "
+        f"{suitable_count} of 12 months have a {period} temperature "
         f"inside ECOCROP's optimal {temp_display} range for "
         f"{requirement['scientificName']}."
     )
@@ -249,7 +269,7 @@ def plan(
         },
         "baseline": {
             "years": years,
-            "label": f"{years[0]}–{years[-1]} avg",
+            "label": baseline_label,
             "monthsAvailable": sum(1 for value in temps_c if value is not None),
         },
         "window": {
@@ -289,7 +309,7 @@ def plan(
         },
         "notes": notes,
         "sources": {
-            "observed": "NASA POWER monthly normals (T2M, PRECTOTCORR)",
+            "observed": observed_source,
             "requirements": "FAO ECOCROP database",
             "geocoding": "OpenStreetMap Nominatim",
         },

@@ -10,6 +10,26 @@ import json
 from pathlib import Path
 
 CROPS = json.loads(Path(__file__).with_name("crops.json").read_text(encoding="utf-8"))["crops"]
+
+
+def _use_ecocrop_ranges(crops):
+    """Take temperature, rain and pH ranges from FAO ECOCROP, matched by scientific name, so
+    Crop Finder scores with the same numbers the season and planting tools show. A crop keeps
+    its crops.json ranges only if ECOCROP is unavailable or missing a value. Returns the source."""
+    try:
+        from services.crops import ecocrop_ranges
+    except ImportError:  # run outside the backend folder
+        return "crops.json"
+    matched = 0
+    for crop in crops:
+        ranges = ecocrop_ranges(crop.get("scientific", ""))
+        if ranges:
+            crop.update(ranges)
+            matched += 1
+    return "FAO ECOCROP" if matched == len(crops) else f"FAO ECOCROP ({matched} of {len(crops)} crops)"
+
+
+RANGES_SOURCE = _use_ecocrop_ranges(CROPS)
 MONTHS = ["January", "February", "March", "April", "May", "June",
           "July", "August", "September", "October", "November", "December"]
 WRONG_SOIL_TYPE_SCORE = 0.4
@@ -82,6 +102,7 @@ def recommend_crops(temp, rain, ph=None, texture=None, irrigated=False, acres=No
 
         results.append({
             "crop": crop["name"],
+            "scientific_name": crop.get("scientific"),
             "emoji": crop["emoji"],
             "category": crop["category"],
             "season_days": crop["season_days"],

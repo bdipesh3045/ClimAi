@@ -73,6 +73,16 @@ FALLBACK_ROWS = [
 
 _catalog: list[dict] | None = None
 _catalog_source = "unknown"
+# Full ECOCROP ranges by scientific name, for the Crop Finder scorer.
+_ranges_by_name: dict[str, dict] = {}
+RANGE_COLUMNS = {
+    "temp_opt": ("TOPMN", "TOPMX"),
+    "temp_abs": ("TMIN", "TMAX"),
+    "rain_opt": ("ROPMN", "ROPMX"),
+    "rain_abs": ("RMIN", "RMAX"),
+    "ph_opt": ("PHOPMN", "PHOPMX"),
+    "ph_abs": ("PHMIN", "PHMAX"),
+}
 
 
 def _normalize(text: str) -> str:
@@ -145,7 +155,7 @@ def _build_crop(row: dict) -> dict | None:
 
 def load_catalog() -> list[dict]:
     """Load and cache the crop catalog (downloaded once)."""
-    global _catalog, _catalog_source
+    global _catalog, _catalog_source, _ranges_by_name
     if _catalog is not None:
         return _catalog
 
@@ -156,6 +166,9 @@ def load_catalog() -> list[dict]:
         if len(crops) < 50:
             raise ValueError("ECOCROP payload looked incomplete")
         _catalog_source = "FAO ECOCROP dataset"
+        _ranges_by_name = {
+            (row.get("ScientificName") or "").strip().lower(): row for row in rows
+        }
     except (urllib.error.URLError, urllib.error.HTTPError, ValueError, OSError):
         crops = [crop for crop in (_build_crop(row) for row in FALLBACK_ROWS) if crop]
         _catalog_source = "built-in fallback (ECOCROP unavailable)"
@@ -218,3 +231,19 @@ def _display_name(crop: dict, needle: str) -> str:
     if candidates:
         return min(candidates, key=len).title()
     return crop["name"]
+
+
+def ecocrop_ranges(scientific_name: str) -> dict | None:
+    """Optimal and absolute temperature (C), annual rain (mm) and pH ranges for one species,
+    keyed like crops.json. None when ECOCROP is unavailable or any range is missing."""
+    load_catalog()
+    row = _ranges_by_name.get((scientific_name or "").strip().lower())
+    if row is None:
+        return None
+    ranges = {}
+    for key, (low_col, high_col) in RANGE_COLUMNS.items():
+        low, high = _number(row, low_col), _number(row, high_col)
+        if low is None or high is None or low > high:
+            return None
+        ranges[key] = [int(v) if float(v).is_integer() else v for v in (low, high)]
+    return ranges
