@@ -37,12 +37,18 @@ coverage/
 .DS_Store
 Thumbs.db
 
-# remove venv
+# Python virtual environments
 venv/
+.venv/
 
-# Python bytecode
+# Python bytecode and test caches
 __pycache__/
 *.py[cod]
+.pytest_cache/
+
+# Local account database
+clim_backend/climai.db
+clim_backend/climai.db-*
 
 # Python tooling
 .venv/

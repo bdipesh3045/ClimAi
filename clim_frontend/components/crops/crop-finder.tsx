@@ -1,36 +1,28 @@
 "use client";
 
-import { useEffect, useState, type FormEvent, type ReactNode } from "react";
-import { ChevronDown, Info, MapPin, Sprout } from "lucide-react";
-import { useAppData } from "@/components/providers/app-data-provider";
-import { AssessmentSummary } from "@/components/crops/assessment-summary";
-import { LocationMap } from "@/components/shared/location-map";
-import { PageIntro } from "@/components/shared/page-intro";
-import { SearchField } from "@/components/shared/search-field";
+import { useState, type FormEvent } from "react";
+import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { ChevronDown, Sprout } from "lucide-react";
+
+import { useAccount } from "@/components/providers/auth-provider";
 import {
-  HelpText,
-  ResultItem,
-  ResultList,
-  StateBlock,
-  buttonClass,
-  inputClass,
-  selectClass,
-  textareaClass,
-} from "@/components/shared/ui-kit";
-import { cn } from "@/lib/utils";
-
-
-type GeoResult = {
-  display_name: string;
-  lat: string;
-  lon: string;
-};
-
-type SelectedLocation = {
-  label: string;
-  lat: number;
-  lon: number;
-};
+  FarmLocationSearch,
+  type FarmLocation,
+} from "@/components/shared/farm-location-search";
+import {
+  ChoiceCard,
+  SectionShell,
+  fieldClass,
+} from "@/components/shared/form-parts";
+import { parseCropAnalysis, saveCropAnalysis } from "@/lib/crop-analysis";
+import {
+  CROP_OPTIONS,
+  IRRIGATION_CHOICES,
+  IRRIGATION_METHODS,
+  SOIL_OPTIONS,
+  type IrrigationChoice,
+} from "@/lib/farm-options";
 
 type CropAnalysisPayload = {
   location: string;
@@ -102,174 +94,23 @@ const challengeCards = [
 
 const plantingSeasons = ["Spring", "Summer", "Fall", "Winter"];
 
-const cropOptions = [
-  "Rice",
-  "Corn",
-  "Soybeans",
-  "Wheat",
-  "Cotton",
-  "Sugarcane",
-  "Sweet potatoes",
-  "Pecans",
-  "Other",
-];
-
-const irrigationOptions = [
-  { label: "Yes", value: "yes" },
-  { label: "No", value: "no" },
-] as const;
-
-const labelClass = "mb-1.5 block text-[13px] font-semibold text-ink-soft";
-
-function ChoiceCard({
-  name,
-  value,
-  label,
-  description,
-  type,
-  required = false,
-  variant = "card",
-  checked,
-  onChange,
-}: {
-  name: string;
-  value: string;
-  label: string;
-  description?: string;
-  type: "checkbox" | "radio";
-  required?: boolean;
-  variant?: "chip" | "card";
-  checked?: boolean;
-  onChange?: () => void;
-}) {
-  const className = description
-    ? "flex min-h-[108px] cursor-pointer flex-col rounded-[12px] border border-line bg-panel p-3.5 text-left transition-colors hover:border-forest-mid/40 has-[:checked]:border-forest has-[:checked]:bg-forest-tint has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-forest-mid"
-    : variant === "chip"
-      ? "flex min-h-11 cursor-pointer items-center gap-2 rounded-[10px] border border-line bg-panel px-3.5 text-[14px] font-medium text-ink-soft transition-colors hover:border-forest-mid/40 has-[:checked]:border-forest has-[:checked]:bg-forest-tint has-[:checked]:text-forest has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-forest-mid"
-      : "flex min-h-12 cursor-pointer items-center gap-2.5 rounded-[10px] border border-line bg-panel px-3.5 text-left text-[14px] font-semibold text-ink-soft transition-colors hover:border-forest-mid/40 has-[:checked]:border-forest has-[:checked]:bg-forest-tint has-[:checked]:text-forest has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-forest-mid";
-  const controlledProps = checked === undefined ? {} : { checked, onChange };
-  const input = (
-    <input
-      type={type}
-      name={name}
-      value={value}
-      required={required}
-      className="size-4 shrink-0 accent-forest"
-      {...controlledProps}
-    />
-  );
-
-  return (
-    <label className={className}>
-      {description ? (
-        <>
-          <span className="flex items-center gap-2.5">
-            {input}
-            <span className="text-[14.5px] font-semibold text-ink">{label}</span>
-          </span>
-          <span className="mt-2 block pl-[26px] text-[13.5px] leading-[1.5] text-ink-mute">{description}</span>
-        </>
-      ) : (
-        <>
-          {input}
-          <span>{label}</span>
-        </>
-      )}
-    </label>
-  );
-}
-
-function SectionShell({
-  step,
-  title,
-  description,
-  required = false,
-  children,
-}: {
-  step: number;
-  title: string;
-  description?: string;
-  required?: boolean;
-  children: ReactNode;
-}) {
-  return (
-    <section
-      aria-labelledby={`crop-step-${step}`}
-      className="grid gap-4 border-t border-line py-7 first:border-t-0 first:pt-0 lg:grid-cols-[240px_minmax(0,1fr)] lg:gap-10"
-    >
-      <div className="flex items-start gap-3 lg:block">
-        <span className="tabular flex size-8 shrink-0 items-center justify-center rounded-full bg-forest text-[13px] font-bold text-white lg:mb-3">
-          {step}
-        </span>
-        <div>
-          <h2 id={`crop-step-${step}`} className="font-heading text-[17px] leading-snug font-bold text-ink">
-            {title}
-          </h2>
-          <p className="mt-1 text-[13px] leading-[1.5] text-ink-mute">
-            {required ? <span className="font-semibold text-forest">Required. </span> : "Optional. "}
-            {description}
-          </p>
-        </div>
-      </div>
-      <div className="min-w-0">{children}</div>
-    </section>
-  );
-}
-
 export function CropFinder() {
+  const router = useRouter();
+  // Saved farm profile, used only as starting values. Every field stays editable here.
+  const profile = useAccount()?.profile ?? null;
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [locationQuery, setLocationQuery] = useState("");
-  const [geoResults, setGeoResults] = useState<GeoResult[]>([]);
-  const [geoStatus, setGeoStatus] = useState<
-    "idle" | "loading" | "empty" | "error"
-  >("idle");
   const [selectedLocation, setSelectedLocation] =
-    useState<SelectedLocation | null>(null);
-  const [irrigationAvailable, setIrrigationAvailable] = useState<
-    "yes" | "no" | ""
-  >("");
+    useState<FarmLocation | null>(() =>
+      profile ? { label: profile.location, ...profile.coordinates } : null,
+    );
+  const [irrigationAvailable, setIrrigationAvailable] =
+    useState<IrrigationChoice>(() =>
+      profile ? (profile.irrigation.available ? "yes" : "no") : "",
+    );
   const [submission, setSubmission] = useState<SubmissionState>({
     status: "idle",
     message: "",
   });
-  const [result, setResult] = useState<unknown>();
-
-  async function searchLocation() {
-    const q = locationQuery.trim();
-    if (q.length < 3) return;
-
-    setGeoStatus("loading");
-    setSelectedLocation(null);
-    setGeoResults([]);
-
-    try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&countrycodes=us&q=${encodeURIComponent(q)}`,
-        { headers: { Accept: "application/json" } },
-      );
-      if (!response.ok) {
-        throw new Error(`Location search failed (${response.status}).`);
-      }
-
-      const results: GeoResult[] = await response.json();
-      setGeoResults(results);
-      setGeoStatus(results.length === 0 ? "empty" : "idle");
-    } catch {
-      setGeoResults([]);
-      setGeoStatus("error");
-    }
-  }
-
-  function chooseLocation(location: GeoResult) {
-    const lat = Number.parseFloat(location.lat);
-    const lon = Number.parseFloat(location.lon);
-    setSelectedLocation({ label: location.display_name, lat, lon });
-    setSavedLocation(location.display_name, { lat, lon });
-    setPrefilled(true);
-    setLocationQuery(location.display_name);
-    setGeoResults([]);
-    setGeoStatus("idle");
-  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -316,7 +157,6 @@ export function CropFinder() {
 
     setIsSubmitting(true);
     setSubmission({ status: "idle", message: "" });
-    setResult(undefined);
 
     const endpoint = process.env.NEXT_PUBLIC_CROP_ANALYSIS_API_URL;
     if (!endpoint) {
@@ -359,17 +199,10 @@ export function CropFinder() {
       }
 
       const responseData: unknown = await response.json();
-      setResult(responseData);
-      setSubmission({
-        status: "success",
-        message: "Farm assessment submitted successfully.",
-      });
-      form.reset();
-      setLocationQuery("");
-      setSelectedLocation(null);
-      setGeoResults([]);
-      setGeoStatus("idle");
-      setIrrigationAvailable("");
+      parseCropAnalysis(responseData); // throws a readable error before we leave the form
+      saveCropAnalysis(responseData);
+      setSubmission({ status: "success", message: "Opening your crop results..." });
+      router.push("/crop-finder/results");
     } catch (error) {
       const message =
         error instanceof Error && error.name === "AbortError"
@@ -384,158 +217,121 @@ export function CropFinder() {
     }
   }
 
-
-  // --- Shared workspace location: start from it when nothing is typed yet ---
-  const { location: savedLocation, coordinates: savedCoordinates, setLocation: setSavedLocation } =
-    useAppData();
-  const [prefilled, setPrefilled] = useState(false);
-  useEffect(() => {
-    if (prefilled || selectedLocation || locationQuery || !savedLocation || !savedCoordinates) return;
-    setPrefilled(true);
-    setSelectedLocation({ label: savedLocation, lat: savedCoordinates.lat, lon: savedCoordinates.lon });
-    setLocationQuery(savedLocation);
-  }, [prefilled, selectedLocation, locationQuery, savedLocation, savedCoordinates]);
-
-  // Bring the receipt into view once the endpoint answers.
-  useEffect(() => {
-    if (result === undefined) return;
-    document
-      .getElementById("crop-analysis-result-heading")
-      ?.scrollIntoView({ behavior: "smooth", block: "start" });
-  }, [result]);
-
   return (
-    <div className="mx-auto w-full max-w-[1120px]">
-      <PageIntro
-        title="Tell us about your farm."
-        description="Describe your location, fields and goals. Your answers are sent to the configured Crop Finder endpoint when you submit."
-      />
+    <div className="mx-auto w-full max-w-[1120px] space-y-6 text-[#1d2a22]">
+      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
+        <span className="inline-flex items-center rounded-full border border-[#dfe7df] bg-[#eef4ee] px-2.5 py-1 text-[12px] font-bold tracking-[0.12em] text-[#3d5c4d] uppercase">
+          Farm details · crop planning
+        </span>
+        <div className="inline-flex items-center rounded-full border border-[#dfe7df] bg-[#eff5ee] px-2.5 py-1 text-[12px] font-medium text-[#425349]">
+          <span className="inline-block h-2 w-2 rounded-full bg-[#246741]" />
+          <span className="ml-2">Farm assessment form</span>
+        </div>
+      </div>
 
-      <form onSubmit={handleSubmit} className="animate-rise rounded-[14px] border border-line bg-panel p-5 sm:p-7">
-        <SectionShell step={1} title="Farm location" description="Search and pick your farm or nearest town." required>
-          <label htmlFor="farm-location" className={labelClass}>
-            Farm location
-          </label>
-          <SearchField
-            id="farm-location"
-            name="location"
-            required
-            value={locationQuery}
-            onChange={(value) => {
-              setLocationQuery(value);
-              setSelectedLocation(null);
-              setGeoResults([]);
-              setGeoStatus("idle");
-            }}
-            onSubmit={() => void searchLocation()}
-            loading={geoStatus === "loading"}
-            placeholder="City, region or address"
+      <h1 className="font-heading text-[34px] leading-[1.05] font-extrabold tracking-[-0.06em] text-[#172720] sm:text-[48px]">
+        Find crops suited to your conditions.
+      </h1>
+      <p className="mt-3 max-w-[760px] text-[15px] leading-7 text-[#5d6a60]">
+        Enter your farm details. We match your local 30-year climate and
+        soil against 30 crops and rank the best fits.
+      </p>
+      {profile && (
+        <p className="mt-2 text-[13px] text-[#5d6a60]">
+          Prefilled from your farm profile.{" "}
+          <Link
+            href="/profile"
+            className="font-semibold text-[#1d4d31] underline-offset-2 hover:underline"
+          >
+            Edit profile
+          </Link>
+        </p>
+      )}
+
+      <form onSubmit={handleSubmit} className="space-y-4">
+        <SectionShell step={1} title="Farm Location" required>
+          <FarmLocationSearch
+            value={selectedLocation}
+            onChange={setSelectedLocation}
           />
-          {selectedLocation ? (
-            <div className="mt-3 grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)]">
-              <LocationMap
-                lat={selectedLocation.lat}
-                lon={selectedLocation.lon}
-                label={selectedLocation.label}
-                zoom={11}
-                className="min-h-[200px]"
-              />
-              <div className="flex items-start gap-2.5 rounded-[12px] bg-forest-tint/60 p-4 text-[14px] leading-[1.55] text-ink-soft">
-                <MapPin size={17} className="mt-0.5 shrink-0 text-forest" aria-hidden="true" />
-                <div className="min-w-0">
-                  <p className="font-semibold break-words text-ink">{selectedLocation.label}</p>
-                  <p className="tabular mt-1.5 text-ink-mute">
-                    {selectedLocation.lat.toFixed(4)}, {selectedLocation.lon.toFixed(4)}
-                  </p>
-                </div>
-              </div>
-            </div>
-          ) : geoResults.length > 0 ? (
-            <ResultList label="Matching locations">
-              {geoResults.map((geoResult) => (
-                <ResultItem
-                  key={`${geoResult.lat}-${geoResult.lon}-${geoResult.display_name}`}
-                  onSelect={() => chooseLocation(geoResult)}
-                  primary={geoResult.display_name}
-                />
-              ))}
-            </ResultList>
-          ) : (
-            <HelpText tone={geoStatus === "error" ? "error" : "mute"}>
-              {geoStatus === "empty"
-                ? "No matches. Try a nearby city or add the state."
-                : geoStatus === "error"
-                  ? "Location search failed. Try again."
-                  : "Type a location and press Search, then pick a result."}
-            </HelpText>
-          )}
         </SectionShell>
 
-        <SectionShell step={2} title="Farm details" description="Size, number of fields and soil." required>
+        <SectionShell step={2} title="Farm Details" required>
           <div className="grid gap-4 md:grid-cols-2">
-            <div className="md:col-span-2">
-              <label htmlFor="farm-size" className={labelClass}>
-                Farm size
-              </label>
+            <label className="block md:col-span-2">
+              <span className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5d7267] uppercase">
+                Farm Size
+              </span>
               <div className="flex gap-2">
                 <input
-                  id="farm-size"
                   name="farmSize"
                   type="number"
+                  defaultValue={profile?.farm.size}
                   min="0.01"
                   step="any"
                   required
                   placeholder="e.g. 24.5"
-                  className={inputClass}
+                  className={fieldClass}
                 />
                 <select
                   name="farmSizeUnit"
                   aria-label="Farm size unit"
-                  className={cn(selectClass, "max-w-36")}
-                  defaultValue="acres"
+                  className={`${fieldClass} max-w-36`}
+                  defaultValue={profile?.farm.sizeUnit ?? "acres"}
                 >
                   <option value="acres">Acres</option>
                   <option value="hectares">Hectares</option>
                 </select>
               </div>
-            </div>
-            <div>
-              <label htmlFor="field-count" className={labelClass}>
-                Number of fields
-              </label>
-              <input
-                id="field-count"
-                name="fieldCount"
-                type="number"
-                min="1"
-                step="1"
-                required
-                placeholder="e.g. 3"
-                className={inputClass}
-              />
-            </div>
-            <div>
-              <label htmlFor="soil-type" className={labelClass}>
-                Soil type <span className="font-normal text-ink-mute">(optional)</span>
-              </label>
-              <select id="soil-type" name="soilType" className={selectClass} defaultValue="">
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5d7267] uppercase">
+                Number of Fields
+              </span>
+              <div className="flex items-center gap-3 rounded-[14px] border border-[#dfe8df] bg-[#f9fbf9] px-3 py-3">
+                <input
+                  name="fieldCount"
+                  type="number"
+                  min="1"
+                  step="1"
+                  required
+                  placeholder="e.g. 3"
+                  className="w-full border-0 bg-transparent text-[15px] font-medium text-[#1f2d27] focus:outline-none"
+                />
+              </div>
+            </label>
+            <label className="block">
+              <span className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5d7267] uppercase">
+                Soil type (Optional)
+              </span>
+              <select
+                name="soilType"
+                className={fieldClass}
+                defaultValue={profile?.soilType ?? ""}
+              >
                 <option value="">Select soil type</option>
-                <option value="Clay">Clay</option>
-                <option value="Silt">Silt</option>
-                <option value="Loam">Loam</option>
-                <option value="Sandy">Sandy</option>
-                <option value="Not sure">Not sure</option>
+                {SOIL_OPTIONS.map((soil) => (
+                  <option key={soil} value={soil}>
+                    {soil}
+                  </option>
+                ))}
               </select>
-            </div>
+            </label>
           </div>
         </SectionShell>
 
-        <SectionShell step={3} title="What you grow now" description="Crops on your land and how they are watered.">
-          <div className="space-y-5">
+        <SectionShell
+          step={3}
+          title="Current Farming Activities"
+          rightLabel="Multi-select crops & water supply"
+        >
+          <div className="space-y-4">
             <fieldset>
-              <legend className={labelClass}>Crops currently planted or cultivated</legend>
+              <legend className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5d7267] uppercase">
+                Currently Planted or Cultivated Crops
+              </legend>
               <div className="flex flex-wrap gap-2">
-                {cropOptions.map((crop) => (
+                {CROP_OPTIONS.map((crop) => (
                   <ChoiceCard
                     key={crop}
                     name="currentCrops"
@@ -543,6 +339,7 @@ export function CropFinder() {
                     label={crop}
                     type="checkbox"
                     variant="chip"
+                    defaultChecked={profile?.currentCrops.includes(crop)}
                   />
                 ))}
               </div>
@@ -550,9 +347,11 @@ export function CropFinder() {
 
             <div className="grid gap-4 md:grid-cols-2">
               <fieldset>
-                <legend className={labelClass}>Irrigation available?</legend>
-                <div className="grid grid-cols-2 gap-2">
-                  {irrigationOptions.map(({ label, value }) => (
+                <legend className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5d7267] uppercase">
+                  Irrigation Availability
+                </legend>
+                <div className="flex gap-4 rounded-[12px] border border-[#dfe8df] bg-[#f9fbf9] px-3 py-3">
+                  {IRRIGATION_CHOICES.map(({ label, value }) => (
                     <ChoiceCard
                       key={value}
                       name="irrigationAvailable"
@@ -568,46 +367,49 @@ export function CropFinder() {
                 </div>
               </fieldset>
 
-              <div>
-                <label htmlFor="irrigation-method" className={labelClass}>
-                  Irrigation method
-                </label>
+              <label className="block">
+                <span className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5d7267] uppercase">
+                  Irrigation Delivery Method
+                </span>
                 <select
-                  id="irrigation-method"
                   name="irrigationMethod"
-                  className={selectClass}
-                  defaultValue=""
+                  className={`${fieldClass} disabled:cursor-not-allowed disabled:opacity-50`}
+                  defaultValue={profile?.irrigation.method ?? ""}
                   disabled={irrigationAvailable !== "yes"}
                   required={irrigationAvailable === "yes"}
                 >
-                  <option value="">{irrigationAvailable === "yes" ? "Select a method" : "Choose “Yes” first"}</option>
-                  <option value="Drip">Drip</option>
-                  <option value="Sprinkler">Sprinkler</option>
-                  <option value="Flood">Flood</option>
-                  <option value="Other">Other</option>
+                  <option value="">Select a method</option>
+                  {IRRIGATION_METHODS.map((method) => (
+                    <option key={method} value={method}>
+                      {method}
+                    </option>
+                  ))}
                 </select>
-              </div>
+              </label>
             </div>
 
-            <div>
-              <label htmlFor="other-notes" className={labelClass}>
-                Anything else we should know?
-              </label>
+            <label className="block">
+              <span className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5d7267] uppercase">
+                Anything else we should know? (crops, challenges, irrigation)
+              </span>
               <textarea
-                id="other-notes"
                 name="otherNotes"
                 rows={3}
-                placeholder="Crops, challenges, irrigation or anything else about your farm"
-                className={textareaClass}
+                placeholder="Add any other details about your farm"
+                className={fieldClass}
               />
-            </div>
+            </label>
           </div>
         </SectionShell>
 
-        <SectionShell step={4} title="Farming goals" description="Choose as many as apply.">
+        <SectionShell
+          step={4}
+          title="Farming Goals"
+          rightLabel="Choose multiple options"
+        >
           <fieldset>
             <legend className="sr-only">Farming goals</legend>
-            <div className="grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
               {goalCards.map(({ title, description }) => (
                 <ChoiceCard
                   key={title}
@@ -622,22 +424,38 @@ export function CropFinder() {
           </fieldset>
         </SectionShell>
 
-        <SectionShell step={5} title="Farming challenges" description="Choose as many as apply.">
+        <SectionShell
+          step={5}
+          title="Farming Challenges"
+          rightLabel="Select multiple options"
+        >
           <fieldset>
             <legend className="sr-only">Farming challenges</legend>
-            <div className="grid grid-cols-2 gap-2.5 md:grid-cols-4">
+            <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
               {challengeCards.map((value) => (
-                <ChoiceCard key={value} name="challenges" value={value} label={value} type="checkbox" />
+                <ChoiceCard
+                  key={value}
+                  name="challenges"
+                  value={value}
+                  label={value}
+                  type="checkbox"
+                />
               ))}
             </div>
           </fieldset>
         </SectionShell>
 
-        <SectionShell step={6} title="Season and harvest history" description="When you plan to plant, and what came before." required>
+        <SectionShell
+          step={6}
+          title="Growing Season & Historical Harvest"
+          required
+        >
           <div className="space-y-4">
             <fieldset>
-              <legend className={labelClass}>Intended planting season</legend>
-              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+              <legend className="mb-2 block text-[12px] font-bold tracking-[0.12em] text-[#5f7163] uppercase">
+                Intended Planting Season
+              </legend>
+              <div className="grid gap-2 sm:grid-cols-4">
                 {plantingSeasons.map((season) => (
                   <ChoiceCard
                     key={season}
@@ -651,62 +469,82 @@ export function CropFinder() {
               </div>
             </fieldset>
 
-            <details className="group rounded-[12px] border border-line bg-paper px-4 py-3">
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[14px] font-semibold text-ink-soft">
-                Previous crop and harvest <span className="font-normal text-ink-mute">(optional)</span>
-                <ChevronDown size={17} className="ml-auto text-ink-mute transition-transform group-open:rotate-180" aria-hidden="true" />
+            <details className="rounded-[14px] border border-[#dfe8df] bg-[#f9fbf9] px-3 py-3 text-[12px] text-[#4a5c53]">
+              <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-medium">
+                Previous Crop & Harvest Information (Optional)
+                <ChevronDown className="h-4 w-4 text-[#567064]" />
               </summary>
               <div className="mt-4 grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label htmlFor="previous-crop" className={labelClass}>
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-semibold">
                     Previous crop
-                  </label>
-                  <input id="previous-crop" name="previousCrop" type="text" placeholder="e.g. Rice" className={inputClass} />
-                </div>
-                <div>
-                  <label htmlFor="harvest-notes" className={labelClass}>
+                  </span>
+                  <input
+                    name="previousCrop"
+                    type="text"
+                    placeholder="e.g. Rice"
+                    className={fieldClass}
+                  />
+                </label>
+                <label className="block">
+                  <span className="mb-1.5 block text-[12px] font-semibold">
                     Harvest notes
-                  </label>
+                  </span>
                   <textarea
-                    id="harvest-notes"
                     name="harvestNotes"
                     rows={3}
-                    placeholder="Previous yield, dates or other notes"
-                    className={textareaClass}
+                    placeholder="Add previous yield, dates, or other relevant notes"
+                    className={fieldClass}
                   />
-                </div>
+                </label>
               </div>
             </details>
           </div>
         </SectionShell>
 
-        <div className="mt-2 flex flex-col gap-4 border-t border-line pt-6 sm:flex-row sm:items-center sm:justify-between">
-          <p className="flex items-start gap-2 text-[13.5px] leading-[1.5] text-ink-mute">
-            <Info size={16} className="mt-0.5 shrink-0" aria-hidden="true" />
-            Your details stay in this form until you submit.
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <p className="text-[12px] text-[#56645e]">
+            <span className="font-semibold text-[#20392c]">
+              Your farm details stay in this form until you submit.
+            </span>{" "}
           </p>
-          <button type="submit" disabled={isSubmitting} className={buttonClass({ size: "lg" })}>
-            <Sprout size={18} aria-hidden="true" />
-            {isSubmitting ? "Submitting…" : "Analyze my farm"}
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="inline-flex items-center justify-center gap-2 rounded-full bg-[#1b4d35] px-5 py-3 text-[12px] font-semibold text-white shadow-[0_10px_22px_rgba(27,77,53,0.2)] transition hover:bg-[#123d2b] disabled:cursor-wait disabled:opacity-70"
+          >
+            <Sprout className="h-4 w-4" />
+            {isSubmitting ? "Submitting..." : "Analyze My Farm"}
           </button>
         </div>
-        {submission.status === "error" && submission.message && (
-          <StateBlock kind="error" title="Could not submit the assessment" className="mt-4">
-            {submission.message}
-          </StateBlock>
-        )}
-        {submission.status === "success" && submission.message && (
-          <p role="status" aria-live="polite" className="mt-4 text-[14px] font-semibold text-forest">
+        {submission.message && (
+          <p
+            role="status"
+            aria-live="polite"
+            className={`px-5 pb-4 text-[12px] ${submission.status === "error" ? "text-[#a33c32]" : "text-[#1d4d31]"}`}
+          >
             {submission.message}
           </p>
         )}
       </form>
 
-      {result !== undefined && (
-        <div className="mt-6">
-          <AssessmentSummary response={result} />
+
+      <footer className="mt-5 flex flex-col items-center justify-between gap-3 border-t border-[#dfe8df] pt-3 text-[12px] text-[#7a857f] sm:flex-row">
+        <div className="flex items-center gap-2">
+          <span className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-[#dfe8df] bg-white text-[#1d4d31]">
+            i
+          </span>
+          <span>
+            Your answers are sent to the configured Crop Finder endpoint when
+            you submit.
+          </span>
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <span>© {new Date().getFullYear()} ClimateAI</span>
+          <span>·</span>
+          <span>Agricultural Intelligence Studio </span>
+        </div>
+      </footer>
     </div>
   );
 }

@@ -1,10 +1,13 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { APICallError, DefaultChatTransport, type UIMessage } from "ai";
 import { ArrowUp, LoaderCircle, MessageCircle, Sprout } from "lucide-react";
-import { useAppData } from "@/components/providers/app-data-provider";
+import { useAuth } from "@/components/providers/auth-provider";
+import type { FarmerProfile } from "@/lib/session";
+import { ASSISTANT_ERRORS, isAssistantErrorMessage } from "@/lib/assistant-errors";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Marker, MarkerContent } from "@/components/ui/marker";
@@ -25,27 +28,74 @@ import {
   MessageScrollerViewport,
 } from "@/components/ui/message-scroller";
 
+// The server adds the farmer's saved profile to the prompt, so "my farm" needs no templating.
 const suggestedQuestions = [
-  "Why might rice suit my location?",
-  "What changed between the sample seasons?",
-  "What should I check before planting?",
-  "How could rainfall affect my crop?",
+  "Which crops suit my farm best?",
+  "When should I plant my current crops?",
+  "How does my soil type affect what I can grow?",
+  "How should I manage water on my farm?",
+  "What weather risks should I watch for in my area?",
 ];
 
+// Odd, so the slice starts on a user question. Must stay under the route's MAX_MESSAGES.
+const MAX_SENT_MESSAGES = 11;
+
+// Send only the latest messages so a long chat keeps working within the route's limits.
+const transport = new DefaultChatTransport({
+  api: "/api/assistant",
+  prepareSendMessagesRequest: ({ messages }) => ({
+    body: { messages: messages.slice(-MAX_SENT_MESSAGES) },
+  }),
+});
+
+const HTTP_UNAUTHORIZED = 401;
+const HTTP_TOO_MANY_REQUESTS = 429;
+
+function chatErrorMessage(error: Error): string {
+  if (isAssistantErrorMessage(error.message)) return error.message;
+  if (APICallError.isInstance(error)) {
+    if (error.statusCode === HTTP_UNAUTHORIZED) {
+      return "Your sign-in has ended. Sign in again to use the assistant.";
+    }
+    if (error.statusCode === HTTP_TOO_MANY_REQUESTS) {
+      return "You have sent a lot of questions. Please wait a few minutes and try again.";
+    }
+  }
+  return ASSISTANT_ERRORS.connection;
+}
+
+const NO_ANSWER_MESSAGE = ASSISTANT_ERRORS.empty;
+
+function messageText(message: UIMessage): string {
+  return message.parts
+    .filter((part) => part.type === "text")
+    .map((part) => part.text)
+    .join("");
+}
+
+function profileLabel(profile: FarmerProfile | null, isMissing: boolean): string {
+  if (profile !== null) {
+    return `Using your profile: ${profile.farmName ?? "your farm"} · ${profile.location}`;
+  }
+  return isMissing ? "No farm profile saved yet" : "Loading your profile…";
+}
+
 export function ClimateChat() {
-  const { location } = useAppData();
+  const { state } = useAuth();
+  const profile = state.status === "signed-in" ? state.account.profile : null;
+  // Only true once sign-in has resolved, so the "add profile" prompt does not flash while loading.
+  const isProfileMissing = state.status === "signed-in" && profile === null;
   const [input, setInput] = useState("");
-  const transport = useMemo(
-    () =>
-      new DefaultChatTransport({
-        api: "/api/assistant",
-        body: () => ({ location }),
-      }),
-    [location],
-  );
   const { messages, sendMessage, status, error, stop, regenerate, clearError } =
     useChat({ transport });
   const isBusy = status === "submitted" || status === "streaming";
+  const lastMessage = messages.at(-1);
+  // A failed or timed-out answer can end with no text and no error. Treat it as a failure too,
+  // so the farmer sees "Try again" instead of a silent empty chat.
+  const isUnanswered =
+    status === "ready" &&
+    lastMessage !== undefined &&
+    (lastMessage.role === "user" || messageText(lastMessage).trim() === "");
 
   function submitQuestion(question = input) {
     const trimmed = question.trim();
@@ -77,18 +127,18 @@ export function ClimateChat() {
   return (
     <div className="h-full min-h-0 w-full">
       <section
-        className="flex h-full min-h-0 flex-col overflow-hidden rounded-[14px] border border-line bg-panel"
-        aria-label="ClimateCrop AI conversation"
+        className="flex h-full min-h-0 flex-col overflow-hidden rounded-2xl border border-[#e7ebe5] bg-white"
+        aria-label="ClimateAI conversation"
       >
-        <header className="flex items-center justify-between gap-3 border-b border-line bg-paper px-4 py-3.5 sm:px-5">
+        <header className="flex items-center justify-between border-b border-[#edf0eb] px-4 py-3.5 sm:px-5">
           <div className="flex items-center gap-3">
-            <span className="flex size-10 items-center justify-center rounded-[10px] bg-forest text-marigold">
-              <Sprout size={19} aria-hidden="true" />
+            <span className="flex size-9 items-center justify-center rounded-full bg-[#eaf2e8] text-[#286540]">
+              <Sprout size={17} />
             </span>
             <div>
-              <h1 className="font-heading text-[16px] font-bold text-ink">ClimateCrop AI assistant</h1>
-              <p className="mt-0.5 text-[13px] text-ink-mute">
-                Context: {location || "no location set"} · demo data
+              <p className="text-xs font-semibold">ClimateAI assistant</p>
+              <p className="mt-0.5 text-[10px] text-[#899289]">
+                {profileLabel(profile, isProfileMissing)}
               </p>
             </div>
           </div>
@@ -97,22 +147,35 @@ export function ClimateChat() {
         <div className="min-h-0 flex-1">
           {messages.length === 0 ? (
             <div className="flex h-full min-h-0 flex-col items-center justify-center px-5 py-5 text-center sm:px-10">
-              <h2 className="flex items-center gap-3 font-display text-[26px] leading-tight text-ink">
-                <MessageCircle size={26} className="shrink-0 text-forest-mid" aria-hidden="true" />
+              <span className="flex size-12 items-center justify-center rounded-2xl bg-[#f1f6ed] text-[#398253]">
+                <MessageCircle size={21} />
+              </span>
+              <h2 className="mt-4 font-heading text-xl font-bold tracking-[-0.03em]">
                 What would you like to understand?
               </h2>
-              <p className="mt-2 max-w-[52ch] text-[15px] leading-[1.6] text-ink-soft">
-                Ask a question about the demonstration data, or start with one
-                of these prompts. The assistant will identify missing context
-                instead of guessing.
+              <p className="mt-2 max-w-md text-xs leading-5 text-[#7b857b]">
+                Ask about your farm, or start with one of these questions. The
+                assistant uses your saved profile and says when something is
+                missing instead of guessing.
               </p>
-              <div className="mt-6 flex max-w-2xl flex-wrap justify-center gap-2.5">
+              {isProfileMissing && (
+                <p className="mt-3 text-xs text-[#7b857b]">
+                  <Link
+                    href="/profile"
+                    className="font-semibold text-[#286540] underline underline-offset-2"
+                  >
+                    Add your farm profile
+                  </Link>{" "}
+                  for answers about your own land.
+                </p>
+              )}
+              <div className="mt-6 flex max-w-2xl flex-wrap justify-center gap-2">
                 {suggestedQuestions.map((question) => (
                   <button
                     key={question}
                     type="button"
                     onClick={() => submitQuestion(question)}
-                    className="min-h-11 rounded-full border border-line bg-panel px-4 py-2 text-[14px] font-medium text-ink-soft transition-[background-color,border-color,transform] hover:-translate-y-px hover:border-forest-mid/40 hover:bg-forest-tint hover:text-forest active:translate-y-0"
+                    className="rounded-full border border-[#e3e9e1] bg-[#fcfcf8] px-3.5 py-2 text-[11px] font-medium text-[#536257] transition-colors hover:border-[#b9d0b6] hover:bg-[#f1f6ed] focus-visible:ring-2 focus-visible:ring-[#398253] focus-visible:ring-offset-2"
                   >
                     {question}
                   </button>
@@ -125,11 +188,11 @@ export function ClimateChat() {
                 <MessageScrollerViewport aria-label="Conversation messages">
                   <MessageScrollerContent className="gap-5 px-4 py-5 sm:px-6">
                     {messages.map((message, messageIndex) => {
-                      const text = message.parts
-                        .filter((part) => part.type === "text")
-                        .map((part) => part.text)
-                        .join("");
+                      const text = messageText(message);
                       const isUser = message.role === "user";
+                      // An answer with no text yet (or a failed one) shows as the
+                      // "Thinking" row or the error banner, not an empty bubble.
+                      if (!isUser && text.trim() === "") return null;
                       return (
                         <MessageScrollerItem
                           key={message.id}
@@ -140,29 +203,31 @@ export function ClimateChat() {
                             className="gap-2.5"
                           >
                             {!isUser && (
-                              <MessageAvatar className="size-8 min-w-8 self-start bg-forest text-marigold">
+                              <MessageAvatar className="size-8 min-w-8 self-start bg-[#eaf2e8] text-[#286540]">
                                 <Sprout size={15} aria-hidden="true" />
                               </MessageAvatar>
                             )}
                             <MessageContent className="max-w-[88%] gap-1.5 sm:max-w-[78%]">
                               <MessageHeader
-                                className={`px-1 text-[12.5px] ${isUser ? "justify-end" : ""}`}
+                                className={`px-1 text-[10px] ${isUser ? "justify-end" : ""}`}
                               >
-                                {isUser ? "You" : "ClimateCrop AI"}
+                                {isUser ? "You" : "ClimateAI"}
                               </MessageHeader>
                               <Bubble
                                 align={isUser ? "end" : "start"}
                                 variant={isUser ? "default" : "secondary"}
                                 className="max-w-full"
                               >
-                                <BubbleContent className="px-4 py-3 text-[14.5px] leading-[1.65] whitespace-pre-wrap">
+                                <BubbleContent className="whitespace-pre-line px-4 py-3 text-xs leading-6">
                                   {text}
                                 </BubbleContent>
                               </Bubble>
                               {!isUser && (
-                                <MessageFooter className="px-1 pt-1 text-[12px]">
-                                  Based on the available demo context · not
-                                  field advice
+                                <MessageFooter className="px-1 pt-1 text-[9px]">
+                                  {profile === null
+                                    ? "General guidance"
+                                    : "Based on your farm profile"}{" "}
+                                  · not field advice
                                 </MessageFooter>
                               )}
                             </MessageContent>
@@ -173,15 +238,15 @@ export function ClimateChat() {
                     {isBusy && (
                       <MessageScrollerItem scrollAnchor>
                         <Message align="start">
-                          <MessageAvatar className="size-8 min-w-8 self-start bg-forest text-marigold">
-                            <Sprout size={15} aria-hidden="true" />
+                          <MessageAvatar className="size-8 min-w-8 self-start bg-[#eaf2e8] text-[#286540]">
+                            <Sprout size={15} />
                           </MessageAvatar>
                           <MessageContent>
-                            <MessageHeader className="px-1 text-[12.5px]">
-                              ClimateCrop AI
+                            <MessageHeader className="px-1 text-[10px]">
+                              ClimateAI
                             </MessageHeader>
                             <Bubble variant="secondary">
-                              <BubbleContent className="flex items-center gap-2 px-4 py-3 text-[14px]">
+                              <BubbleContent className="flex items-center gap-2 px-4 py-3 text-xs">
                                 <LoaderCircle
                                   size={14}
                                   className="animate-spin"
@@ -201,14 +266,13 @@ export function ClimateChat() {
           )}
         </div>
 
-        {error && (
+        {(error || isUnanswered) && (
           <div
-            className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-[12px] bg-clay-tint px-4 py-3 sm:mx-5"
+            className="mx-4 mb-3 flex items-center justify-between gap-3 rounded-xl border border-[#edd8d3] bg-[#fbf4f2] px-4 py-3 sm:mx-5"
             role="alert"
           >
-            <p className="text-[14px] leading-[1.5] text-clay-ink">
-              The assistant could not connect. Please try again; no answer was
-              invented.
+            <p className="text-xs leading-5 text-[#87594c]">
+              {error ? chatErrorMessage(error) : NO_ANSWER_MESSAGE}
             </p>
             <Button
               type="button"
@@ -224,12 +288,12 @@ export function ClimateChat() {
 
         <form
           onSubmit={handleSubmit}
-          className="border-t border-line bg-paper p-3 sm:p-4"
+          className="border-t border-[#edf0eb] bg-[#fcfcf8] p-3 sm:p-4"
         >
           <label htmlFor="assistant-prompt" className="sr-only">
-            Ask ClimateCrop AI a question
+            Ask ClimateAI a question
           </label>
-          <div className="flex items-end gap-2 rounded-[12px] border border-input bg-panel p-2 transition-colors focus-within:border-forest-mid focus-within:ring-3 focus-within:ring-forest-mid/15">
+          <div className="flex items-end gap-2 rounded-2xl border border-[#e2e8df] bg-white p-2 focus-within:border-[#a8c5a5] focus-within:ring-2 focus-within:ring-[#398253]/15">
             <Textarea
               id="assistant-prompt"
               rows={1}
@@ -239,7 +303,7 @@ export function ClimateChat() {
               onChange={(event) => setInput(event.target.value)}
               onKeyDown={handleComposerKeyDown}
               disabled={isBusy}
-              className="max-h-32 min-h-11 resize-none border-0 bg-transparent px-2 py-2.5 text-[15px] shadow-none focus-visible:ring-0"
+              className="max-h-32 min-h-10 resize-none border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0"
             />
             {isBusy ? (
               <Button
@@ -248,9 +312,9 @@ export function ClimateChat() {
                 size="icon"
                 aria-label="Stop generating"
                 onClick={stop}
-                className="size-11 shrink-0 rounded-[10px]"
+                className="shrink-0 rounded-xl"
               >
-                <span className="size-3 rounded-[3px] bg-current" />
+                <span className="size-2.5 rounded-sm bg-current" />
               </Button>
             ) : (
               <Button
@@ -258,20 +322,19 @@ export function ClimateChat() {
                 size="icon"
                 aria-label="Send question"
                 disabled={!input.trim()}
-                className="size-11 shrink-0 rounded-[10px]"
+                className="shrink-0 rounded-xl"
               >
                 <ArrowUp />
               </Button>
             )}
           </div>
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1">
-            <Marker className="text-[12px]">
+            <Marker className="text-[9px]">
               <MarkerContent>
-                Demonstration data only · no live weather or soil source
-                connected
+                Uses your saved farm profile · no live weather or soil feed
               </MarkerContent>
             </Marker>
-            <span className="hidden text-[12px] text-ink-mute sm:inline">
+            <span className="text-[9px] text-[#9aa39a]">
               Enter to send · Shift + Enter for a new line
             </span>
           </div>
