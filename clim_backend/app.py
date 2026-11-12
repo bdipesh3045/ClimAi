@@ -7,6 +7,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 import accounts
+import plan
 from crop_suitability import recommend_crops
 from services import planting, season
 from services.climate import CLIMATOLOGY_LABEL, MONTH_KEYS, ClimateUnavailable, fetch_monthly_climate  # noqa: F401
@@ -43,6 +44,7 @@ CORS(app, resources={
     r"/api/planting/plan": {},
 })
 app.register_blueprint(accounts.bp)
+app.register_blueprint(plan.bp)
 app.teardown_appcontext(close_db)
 
 ACRES_PER_HECTARE = 2.47105

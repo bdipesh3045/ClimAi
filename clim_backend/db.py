@@ -26,6 +26,22 @@ CREATE TABLE IF NOT EXISTS profiles (
     current_crops     TEXT NOT NULL,
     updated_at        TEXT NOT NULL
 );
+CREATE TABLE IF NOT EXISTS plan_progress (
+    user_id  INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    task_id  TEXT NOT NULL,
+    done_at  TEXT NOT NULL,
+    PRIMARY KEY (user_id, task_id)
+);
+CREATE TABLE IF NOT EXISTS field_notes (
+    id         INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    crop       TEXT NOT NULL,
+    note_date  TEXT,
+    challenge  TEXT,
+    notes      TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS field_notes_by_user ON field_notes (user_id, id);
 """
 
 

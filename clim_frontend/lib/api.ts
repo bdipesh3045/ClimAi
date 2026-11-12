@@ -16,8 +16,10 @@ export class ApiError extends Error {
 }
 
 interface ApiRequest {
-  method?: "GET" | "POST" | "PUT"
+  method?: "GET" | "POST" | "PUT" | "DELETE"
   body?: unknown
+  /** Override for slow routes, such as a first climate lookup. */
+  timeoutMs?: number
 }
 
 /** Return the {error} message from a failed response, or a status-based fallback. */
@@ -34,7 +36,10 @@ export async function readErrorMessage(response: Response): Promise<string> {
 }
 
 /** Send a JSON request to /backend{path}. Resolves to the parsed body (null for 204) or throws ApiError. */
-export async function apiFetch(path: string, { method = "GET", body }: ApiRequest = {}): Promise<unknown> {
+export async function apiFetch(
+  path: string,
+  { method = "GET", body, timeoutMs = REQUEST_TIMEOUT_MS }: ApiRequest = {},
+): Promise<unknown> {
   let response: Response
   try {
     response = await fetch(`${BACKEND_PREFIX}${path}`, {
@@ -43,7 +48,7 @@ export async function apiFetch(path: string, { method = "GET", body }: ApiReques
       body: body === undefined ? undefined : JSON.stringify(body),
       credentials: "same-origin",
       cache: "no-store",
-      signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+      signal: AbortSignal.timeout(timeoutMs),
     })
   } catch {
     throw new ApiError(SERVER_DOWN_MESSAGE, 0)

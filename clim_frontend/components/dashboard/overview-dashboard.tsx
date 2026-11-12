@@ -13,7 +13,8 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PageIntro } from "@/components/shared/page-intro";
-import { improvementActions, seasonalSummary } from "@/lib/demo-data";
+import { seasonalSummary } from "@/lib/demo-data";
+import { useSeasonPlan } from "@/components/plans/use-season-plan";
 import { demoClimateService } from "@/lib/climate-service";
 import { useAppData } from "@/components/providers/app-data-provider";
 import { LocationSearch } from "@/components/shared/location-search";
@@ -45,11 +46,9 @@ const tools: Array<{ title: string; href: string; icon: LucideIcon; body: string
 ];
 
 export function OverviewDashboard() {
-  const { location, completedActionIds } = useAppData();
+  const { location } = useAppData();
   const snapshot = demoClimateService.getDashboardSnapshot(location);
   const locationLabel = location ? location.split(",")[0] : "Not set";
-  const nextActions = improvementActions.filter((item) => !completedActionIds.includes(item.id)).slice(0, 3);
-  const done = improvementActions.length - improvementActions.filter((item) => !completedActionIds.includes(item.id)).length;
 
   return (
     <div className="flex flex-col gap-6">
@@ -157,39 +156,7 @@ export function OverviewDashboard() {
           </Link>
         </Panel>
 
-        <Panel className="p-5 sm:p-6" aria-labelledby="next-steps-heading">
-          <PanelHead
-            id="next-steps-heading"
-            icon={ListChecks}
-            title="Next on your checklist"
-            description={`${done} of ${improvementActions.length} season actions done. Saved in this browser.`}
-          />
-          {nextActions.length > 0 ? (
-            <ul className="mt-3 divide-y divide-line-soft">
-              {nextActions.map((item) => (
-                <li key={item.id} className="py-3.5 last:pb-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <p className="text-[14.5px] font-semibold text-ink">{item.title}</p>
-                    <Pill tone={item.priority === "High priority" ? "bad" : item.priority === "Worth exploring" ? "good" : "info"}>
-                      {item.priority}
-                    </Pill>
-                  </div>
-                  <p className="mt-1 text-[13.5px] leading-[1.5] text-ink-mute">{item.description}</p>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="mt-4 rounded-[12px] bg-forest-tint px-4 py-3 text-[14px] font-semibold text-forest">
-              Every action on your checklist is done.
-            </p>
-          )}
-          <Link
-            href="/improvement-plan"
-            className="mt-5 inline-flex items-center gap-1.5 text-[14px] font-semibold text-forest hover:underline"
-          >
-            Open improvement plan <ArrowRight size={15} aria-hidden="true" />
-          </Link>
-        </Panel>
+        <NextTasks />
       </div>
 
       <section
@@ -229,5 +196,67 @@ function SummaryRow({ label, value, detail }: { label: string; value: string; de
       </div>
       <dd className="tabular shrink-0 text-[14.5px] font-semibold text-forest">{value}</dd>
     </div>
+  );
+}
+
+/** The first open tasks from the server-built season plan. */
+function NextTasks() {
+  const { state } = useSeasonPlan();
+  const next = state.status === "ready" ? state.plan.tasks.filter((task) => !task.done).slice(0, 3) : [];
+
+  return (
+    <Panel className="p-5 sm:p-6" aria-labelledby="next-steps-heading">
+      <PanelHead
+        id="next-steps-heading"
+        icon={ListChecks}
+        title="Next in your season plan"
+        description={
+          state.status === "ready"
+            ? `${state.plan.progress.done} of ${state.plan.progress.total} tasks done for ${state.plan.focus.crop.toLowerCase()}.`
+            : "Built from your farm profile and saved to your account."
+        }
+      />
+      {state.status === "loading" && (
+        <div className="mt-4 space-y-3" aria-hidden="true">
+          <div className="skeleton h-12 rounded-[10px]" />
+          <div className="skeleton h-12 rounded-[10px]" />
+        </div>
+      )}
+      {state.status === "missing" && (
+        <p className="mt-4 text-[14px] text-ink-mute">
+          <Link href="/profile" className="font-semibold text-forest hover:underline">
+            Complete your farm profile
+          </Link>{" "}
+          to get a season plan for your land.
+        </p>
+      )}
+      {state.status === "error" && <p className="mt-4 text-[14px] text-clay">{state.message}</p>}
+      {state.status === "ready" &&
+        (next.length > 0 ? (
+          <ul className="mt-3 divide-y divide-line-soft">
+            {next.map((task) => (
+              <li key={task.id} className="py-3.5 last:pb-0">
+                <div className="flex flex-wrap items-center gap-2">
+                  <p className="text-[14.5px] font-semibold text-ink">{task.title}</p>
+                  <Pill tone={task.priority === "High" ? "bad" : task.priority === "Medium" ? "warn" : "neutral"}>
+                    {task.priority} priority
+                  </Pill>
+                </div>
+                <p className="mt-1 text-[13.5px] text-forest-mid">{task.dueLabel}</p>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="mt-4 rounded-[12px] bg-forest-tint px-4 py-3 text-[14px] font-semibold text-forest">
+            Every task in your plan is done.
+          </p>
+        ))}
+      <Link
+        href="/improvement-plan"
+        className="mt-5 inline-flex items-center gap-1.5 text-[14px] font-semibold text-forest hover:underline"
+      >
+        Open season plan <ArrowRight size={15} aria-hidden="true" />
+      </Link>
+    </Panel>
   );
 }

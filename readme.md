@@ -1,202 +1,218 @@
-# ClimateAI
+# ClimateCrop AI
 
-ClimateAI is an AI-powered agricultural platform that helps farmers make better farming decisions using soil, weather, and climate data.
+ClimateCrop AI turns public climate and crop records into planting decisions. A farmer saves their farm once (location, size, soil, irrigation, crops), and the app answers four questions for that exact place:
 
-Farmers can search for their location, and ClimateAI analyzes the local environmental conditions to recommend suitable crops and provide useful farming insights.
+- **Which crops fit this land?** All 30 crops are scored against the NASA 30-year climate and FAO ECOCROP crop ranges.
+- **What changed since last season?** A past season's observed weather is set against the coming seasonal outlook.
+- **When should this crop go in the ground?** A month-by-month planting window comes from climate normals.
+- **What do I do next?** A season plan of dated tasks, built from the farm's own data, with progress and field notes saved to the account.
+
+Every number shown is either sourced real data or clearly labelled as a sample. A page-by-page guide to what each screen calls is in [`docs/pages.md`](docs/pages.md).
 
 ## Features
 
-### 1. Crop Recommendations
+| Page | What it does | Data |
+|---|---|---|
+| Crop Finder and Crop Results | Ranks 30 crops for the farm. Shows the top crop's season, expected harvest, and how it fits on warmth, water and soil, plus the full ranked table and the land's climate. | NASA POWER 30-year climatology, FAO ECOCROP, `crops.json` |
+| Season Comparison | Compares a past season (or a 3- or 5-year average) with the Open-Meteo seasonal outlook over the farmer's growing window. Shows climate risks, a verdict for each crop (Continue, Monitor, Reconsider) and next steps. | NASA POWER monthly and daily, Open-Meteo seasonal (ECMWF SEAS5), FAO ECOCROP |
+| Planting & Weather | Finds the months whose mean temperature is inside a crop's ECOCROP optimum, and the longest unbroken window. | NASA POWER (30-year normal by default, or the last 1, 3 or 5 years), FAO ECOCROP |
+| Improvement Plan | Builds a season plan on the server from the saved profile: soil, water, variety and timing tasks with due months, plus field notes. | Farm profile, NASA POWER 30-year climatology, crop scorer |
+| AI Assistant | Answers farming questions in plain language using the farmer's profile as context. | Google Gemini (server-side) |
+| Overview | Location search with a map, links into each tool, the next tasks from the season plan, and clearly labelled sample conditions. | OpenStreetMap Nominatim, season plan |
+| Farm Profile, sign-up and sign-in | Farmer accounts and the saved farm details every tool starts from. | SQLite, OpenStreetMap Nominatim (location picker, called from the browser) |
 
-- Search for a farm location.
-- Automatically retrieve soil and climate information.
-- Recommend suitable crops based on local conditions.
-- Explain why a crop is suitable.
-- Identify possible climate and soil risks.
+## How the scoring works
 
-### 2. Last Season Comparison
+ClimateCrop AI is rule-based and transparent. There is no trained machine-learning model.
 
-- Compare weather conditions from previous growing seasons.
-- Analyze temperature and rainfall changes.
-- Record previous crops and harvest results.
-- Identify possible reasons for changes in crop performance.
+- **Crop score** (`clim_backend/crop_suitability.py`): each crop gets a 0 to 1 score for warmth, water, and soil pH and type when known. The score is 1 inside the crop's ideal range and slides to 0 at its survival limit. The overall score is `60% × weakest factor + 40% × average`, because a crop is only as strong as its weakest need. The levels are Great fit (80+), Good fit (60+), Possible with care (40+) and Not recommended. The best planting month is found by trying every start month. Expected harvest is the crop's typical good-year yield × the score.
+- **Crop ranges**: temperature, rainfall and pH ranges come from **FAO ECOCROP**, matched by scientific name. This is the same database the season and planting tools use, so every page agrees. `crops.json` adds the season length, soil textures and typical yield, which are approximate prototype values.
+- **Season risks** (`services/season.py`): fixed thresholds. A hot month has a mean above 86°F, an extreme day goes above 95°F, a dry month gets under 1 in of rain, a very wet month gets over 8 in, and waterlogging means consecutive months above 6 in. The thresholds are returned with every rating.
+- **Season plan** (`services/season_plan.py`): each task is triggered by the analysis. For example, a soil test is added when pH is unknown, a water plan when the crop's season is dry and the farm isn't irrigated, and drainage checks when rain exceeds the crop's range. Each task states the numbers that triggered it.
 
-### 3. Improvement Plans
+## Data sources
 
-- Provide suggestions based on farm conditions.
-- Identify possible soil and water problems.
-- Recommend ways to improve farming practices.
+- [NASA POWER](https://power.larc.nasa.gov/): 30-year monthly climatology, plus monthly and daily observations.
+- [Open-Meteo Seasonal Forecast API](https://open-meteo.com/en/docs/seasonal-forecast-api): ECMWF SEAS5 ensemble-mean outlook.
+- [FAO ECOCROP](https://github.com/OpenCLIM/ecocrop): crop temperature, rainfall and pH ranges for 2,568 species. Downloaded once and saved to `clim_backend/data/ecocrop.csv`.
+- [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/): place search. Maps use OpenStreetMap tiles.
 
-### 4. Planting and Weather
+## Technologies
 
-- Show suitable planting periods.
-- Provide local weather information.
-- Highlight important weather conditions and risks.
+- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts, Leaflet, Vercel AI SDK (Gemini for the assistant), OpenUI (AI-generated planting briefs).
+- **Backend:** Python, Flask 3, flask-cors, SQLite. The standard library does the rest; there is no pandas or scikit-learn.
+- **Design:** the "Seed Packet" system, documented in [`DESIGN.md`](DESIGN.md), with product notes in [`PRODUCT.md`](PRODUCT.md).
 
-### 5. AI Assistant
-
-- Answer farming-related questions.
-- Explain crop recommendations.
-- Help farmers understand climate and soil conditions.
-
-## Technologies Used
-
-**Frontend**
-
-- Next.js
-- React
-- TypeScript
-- Tailwind CSS
-
-**Backend**
-
-- Python
-- Flask
-- Pandas
-- Scikit-learn
-
-**Machine Learning**
-
-- Decision Tree Regression
-- Crop yield prediction
-- Crop suitability analysis
-
-## Data Sources
-
-- [USDA NRCS](https://websoilsurvey.nrcs.usda.gov/) - Soil information.
-- [Open-Meteo](https://open-meteo.com/) - Weather data.
-- [NASA POWER](https://power.larc.nasa.gov/) - Historical climate data.
-- USDA and agricultural research publications - Crop information and growing requirements.
-
-## Machine Learning
-
-ClimateAI uses historical agricultural data to understand the relationship between climate conditions and crop yields.
-
-The existing dataset contains approximately 28,242 records from 1990 to 2013.
-
-It includes information such as:
-
-- Temperature
-- Rainfall
-- Pesticide usage
-- Crop type
-- Historical crop yield
-
-A Decision Tree Regression model is used for crop yield prediction.
-
-Crop suitability analysis is developed separately using crop requirements, soil information, and climate conditions.
-
-## Project Structure
+## Project structure
 
 ```text
-climateai/
-├── frontend/
-├── backend/
-│   ├── app/
-│   │   ├── routes/
-│   │   ├── services/
-│   │   └── models/
-│   ├── data/
-│   ├── app.py
-│   ├── model.py
-│   └── requirements.txt
-└── README.md
+climAi/
+├── clim_backend/                 Flask API (port 5001)
+│   ├── app.py                    App setup, CORS, crop analysis, search, season and planting routes
+│   ├── accounts.py               Sign up, sign in, farm profile
+│   ├── plan.py                   Season plan, task progress, field notes
+│   ├── db.py                     SQLite schema and connection
+│   ├── validation.py             Shared input checks
+│   ├── crop_suitability.py       Crop scoring rules
+│   ├── crops.json                30 crops (scientific name, season, soils, yield)
+│   ├── services/
+│   │   ├── climate.py            NASA POWER 30-year climatology (shared)
+│   │   ├── crops.py              FAO ECOCROP catalog, search and ranges
+│   │   ├── season.py             Season comparison, geocoding, NASA and Open-Meteo
+│   │   ├── planting.py           Planting window
+│   │   └── season_plan.py        Season plan tasks
+│   ├── data/ecocrop.csv          Cached ECOCROP database
+│   └── test_app.py, test_accounts.py, test_plan.py
+├── clim_frontend/                Next.js app (port 3000)
+│   ├── app/                      Pages and the assistant and brief API routes
+│   ├── components/               Page components and the shared UI kit
+│   └── lib/                      API client, response parsers, helpers
+├── docs/                         Page guide and feature plans
+├── DESIGN.md                     Design system
+└── PRODUCT.md                    Product context
 ```
 
-## Installation
+## Running locally
 
 ### Prerequisites
 
 - Python 3.10+
-- Node.js
-- npm
-- Git
+- Node.js 22+ with pnpm (the repo uses `pnpm-lock.yaml`)
 
-### 1. Clone the repository
-
-```bash
-git clone <YOUR_REPOSITORY_URL>
-cd climateai
-```
-
-### 2. Run the Backend
+### 1. Backend
 
 ```bash
 cd clim_backend
-
 python -m venv venv
 source venv/bin/activate
-
 pip install -r requirements.txt
-export CLIMAI_SECRET_KEY=$(python -c 'import secrets; print(secrets.token_hex(32))')
+
+# Once: create a secret key file (git-ignored)
+echo "CLIMAI_SECRET_KEY=$(python3 -c 'import secrets; print(secrets.token_hex(32))')" > .env
+
+# Every time
+set -a; source .env; set +a
 python app.py
 ```
 
-`CLIMAI_SECRET_KEY` signs the sign-in cookie, and the backend refuses to start without it (at least 32 characters). A new key on each start signs everyone out, which is fine locally. Keep one fixed key in a deployed environment. Accounts and profiles are stored in `clim_backend/climai.db`, created on first use. Set `CLIMAI_DB_PATH` to store them elsewhere. See `clim_backend/.env.example`.
+The API runs at `http://127.0.0.1:5001`. Port 5000 is avoided because macOS AirPlay uses it.
 
-Start the backend with `python app.py` rather than `flask run`. Only `python app.py` turns off the `Secure` cookie flag for the plain-http dev server, and some browsers, Safari among them, will not keep the sign-in cookie without that.
+`CLIMAI_SECRET_KEY` signs the sign-in cookie, and the backend refuses to start without one of at least 32 characters. Accounts, profiles, plan progress and field notes are stored in `clim_backend/climai.db`, which is created on first use. Set `CLIMAI_DB_PATH` to store it elsewhere. Start with `python app.py` rather than `flask run`, because only `python app.py` turns off the `Secure` cookie flag for the plain-http dev server (Safari drops the cookie otherwise).
 
-The Flask backend will run at:
-
-`http://127.0.0.1:5001`
-
-### 3. Run the Frontend
-
-Open another terminal:
+### 2. Frontend
 
 ```bash
 cd clim_frontend
-
-npm install
-npm run dev
+cp .env.example .env.local   # then fill in the values below
+pnpm install
+pnpm dev
 ```
 
-The frontend will run at:
+The app runs at `http://localhost:3000`.
 
-`http://localhost:3000`
+| Variable | Used for |
+|---|---|
+| `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` | Crop Finder posts here, normally `http://127.0.0.1:5001/api/crop-analysis` |
+| `NEXT_PUBLIC_API_BASE_URL` | Optional base for the search, season and planting routes (default `http://127.0.0.1:5001`) |
+| `BACKEND_URL` | Server-side target of the `/backend/*` proxy for account, plan and notes routes (default `http://127.0.0.1:5001`) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | AI Assistant (Gemini). Server-side only |
+| `GEMINI_MODEL` | Optional assistant model override |
+| `THESYS_API_KEY` | Optional AI-generated planting brief (OpenUI). Server-side only |
 
-### Crop Finder API
+Restart the frontend after changing environment variables.
 
-Set `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` in `clim_frontend/.env.local` to `http://127.0.0.1:5001/api/crop-analysis` for local development. The Flask endpoint looks up the 30-year monthly climate for the coordinates from NASA POWER, scores every crop in `clim_backend/crops.json` with `crop_suitability.py`, and returns the crops ranked best first. The backend must allow requests from the frontend origin when hosted on a different port or domain.
+### 3. Tests
 
-The response looks like this (one entry per crop, best first):
+```bash
+cd clim_backend
+python -m unittest test_app test_accounts test_plan
+python crop_suitability.py      # scorer self-check
+```
+
+## API reference
+
+All errors come back as `{"error": "..."}` with plain, user-safe messages. Technical details are only written to the server log.
+
+### Routes the browser calls directly (CORS-allowed)
+
+| Method | Path | Purpose |
+|---|---|---|
+| GET | `/api/health` | Status and crop catalog source |
+| POST | `/api/crop-analysis` | Score all crops for a farm (Crop Finder) |
+| GET | `/api/locations/search?q=` | Place search, up to 5 results |
+| GET | `/api/crops/search?q=&limit=` | Search the FAO ECOCROP catalog |
+| POST | `/api/season/compare` | Season comparison |
+| POST | `/api/planting/plan` | Planting window. `baselineSpan` is `30` (30-year normal) or `1`, `3`, `5` years |
+
+A new browser-called route must be added to the CORS list in `app.py`.
+
+### Routes behind the `/backend` proxy (signed-in, same-origin cookie)
+
+The browser calls `/backend/*` on the Next.js site, and `next.config.mjs` forwards those calls to Flask at `BACKEND_URL`. This keeps the sign-in cookie first-party, so these routes need no CORS.
+
+| Method | Path | Body | Success |
+|---|---|---|---|
+| POST | `/api/auth/signup` | `{"email", "password"}` | `201 {"user", "profile": null}`, signs in |
+| POST | `/api/auth/login` | `{"email", "password"}` | `200 {"user", "profile"}`, signs in |
+| POST | `/api/auth/logout` | none | `204` |
+| GET | `/api/auth/me` | none | `200 {"user", "profile"}` |
+| PUT | `/api/profile` | profile fields | `200 {"profile"}` |
+| GET | `/api/plan?crop=` | none | `200` season plan for the saved profile (`409` with `code: "profile_required"` without a profile) |
+| PUT | `/api/plan/tasks/<task_id>` | `{"done": true}` | `200 {"id", "done"}` |
+| GET | `/api/notes` | none | `200 {"notes": [...]}`, newest first |
+| POST | `/api/notes` | `{"crop", "date", "challenge", "notes"}` | `201 {"note"}` |
+| DELETE | `/api/notes/<id>` | none | `204` (`404` for another farmer's note) |
+
+Passwords must be 8 to 128 characters and are stored as scrypt hashes. Sign-in returns `429` after 10 failed attempts for one email within 15 minutes; that count is kept in memory and resets when the backend restarts.
+
+### Crop analysis request
+
+```json
+{
+  "location": "Monroe, Ouachita Parish, Louisiana, United States",
+  "coordinates": { "lat": 32.5093, "lon": -92.1193 },
+  "farm": { "size": 40, "sizeUnit": "acres", "fieldCount": 2 },
+  "soilType": "Loam",
+  "currentCrops": ["Soybeans", "Rice"],
+  "irrigation": { "available": false, "method": null },
+  "goals": ["Increase crop yield"],
+  "challenges": ["Drought"],
+  "plantingSeason": "Spring",
+  "harvestHistory": { "previousCrop": "Rice", "notes": "" },
+  "otherNotes": ""
+}
+```
+
+Only `coordinates`, `farm`, `soilType` and `irrigation` affect the score. `soilType` is `null` when not selected.
+
+### Crop analysis response (one entry per crop, best first)
 
 ```json
 {
   "message": "Crop recommendations ready.",
-  "location": "Monroe, Louisiana",
-  "farm": {
-    "acres": 24.5,
-    "irrigated": false,
-    "soil_type": "loam"
-  },
+  "location": "Monroe, Ouachita Parish, Louisiana, United States",
+  "farm": { "acres": 40, "irrigated": false, "soil_type": "loam" },
   "climate": {
     "source": "NASA POWER 30-year monthly climatology",
-    "monthly_temp_c": [7.03, 9.16, "... 12 values, January first"],
+    "monthly_temp_c": [7.0, 9.2, "... 12 values, January first"],
     "monthly_rain_mm": [122.1, 133.6, "... 12 values, January first"]
   },
   "recommendations": [
     {
       "crop": "Soybean",
+      "scientific_name": "Glycine max",
       "emoji": "🫛",
       "category": "legume",
       "season_days": 120,
       "needs": {
-        "temp_c": [20, 33],
-        "temp_limit_c": [10, 38],
-        "rain_mm": [600, 1500],
-        "rain_limit_mm": [450, 1800],
-        "ph": [5.5, 6.5],
-        "soil_types": ["loam", "silt loam", "clay loam"]
+        "temp_c": [20, 33], "temp_limit_c": [10, 38],
+        "rain_mm": [600, 1500], "rain_limit_mm": [450, 1800],
+        "ph": [5.5, 6.5], "soil_types": ["loam", "silt loam", "clay loam"]
       },
       "score": 100,
       "level": "Great fit",
       "main_limit": "warmth",
-      "factors": {
-        "soil type": 1.0,
-        "warmth": 1.0,
-        "water": 1.0
-      },
+      "factors": { "soil type": 1.0, "warmth": 1.0, "water": 1.0 },
       "plant_month": "March",
       "harvest_month": "July",
       "season_temp_c": 20.7,
@@ -204,7 +220,7 @@ The response looks like this (one entry per crop, best first):
       "season_rain_mm": 478,
       "dry_season": false,
       "harvest_lb_per_acre": 3000,
-      "harvest_lb_total": 73500,
+      "harvest_lb_total": 120000,
       "harvest_what": "beans",
       "missing": ["soil pH"]
     }
@@ -212,59 +228,9 @@ The response looks like this (one entry per crop, best first):
 }
 ```
 
-`level` is `Great fit` (80+), `Good fit` (60+), `Possible with care` (40+) or `Not recommended`. Harvest numbers are `null` for crops scoring under 40. `needs` holds the crop's ideal (`temp_c`, `rain_mm`, `ph`) and survival (`*_limit_*`) ranges from `crops.json`, in deg C and mm. `farm` echoes the inputs the scorer used. The Crop Finder page saves the response in `sessionStorage` and shows it on `/crop-finder/results`. Invalid input returns `400` and a failed climate lookup returns `502`, both as `{"error": "..."}`. Run the backend tests with `python -m unittest test_app test_accounts` from `clim_backend`.
+Harvest numbers are `null` for crops scoring under 40. `needs` holds the crop's ideal and survival ranges from FAO ECOCROP, in °C and mm. The Crop Finder page saves the response in `sessionStorage` and shows it on `/crop-finder/results`. Invalid input returns `400` and a failed climate lookup returns `502`.
 
-The request body is JSON with this shape:
-
-```json
-{
-  "location": "Klaten Regency, Central Java, Indonesia",
-  "coordinates": {
-    "lat": -7.7058,
-    "lon": 110.6064
-  },
-  "farm": {
-    "size": 24.5,
-    "sizeUnit": "acres",
-    "fieldCount": 3
-  },
-  "soilType": "Loam",
-  "currentCrops": ["Rice", "Corn"],
-  "irrigation": {
-    "available": true,
-    "method": "Drip"
-  },
-  "goals": ["Increase crop yield"],
-  "challenges": ["Drought"],
-  "plantingSeason": "Summer",
-  "harvestHistory": {
-    "previousCrop": "Rice",
-    "notes": "Harvest notes"
-  },
-  "otherNotes": ""
-}
-```
-
-Restart the frontend after changing the environment variable. HTTP errors from the backend are shown in the form.
-`soilType` is `null` when not selected. When irrigation is unavailable, `irrigation.method` is `null`; when available, a delivery method is required. `otherNotes` is an optional trimmed string.
-
-### Accounts and Farm Profile
-
-Farmers sign up at `/signup` and sign in at `/login`. Every page except the landing page, `/login` and `/signup` needs a signed-in farmer. A guest is sent to `/login?next=<page>` and returns to that page after signing in. A farmer without a profile goes to `/profile` first. The profile stores name, optional phone and farm name, farm location, size, soil type, irrigation and current crops. The Crop Finder starts from these values.
-
-The browser calls `/backend/*` on the Next.js site, and `next.config.mjs` forwards those calls to Flask at `BACKEND_URL` (default `http://127.0.0.1:5001`). This keeps the sign-in cookie first-party, so the account routes need no CORS.
-
-| Method | Path | Body | Success |
-|--------|------|------|---------|
-| POST | `/api/auth/signup` | `{"email", "password"}` | `201 {"user", "profile": null}`, signs in |
-| POST | `/api/auth/login` | `{"email", "password"}` | `200 {"user", "profile"}`, signs in |
-| POST | `/api/auth/logout` | none | `204` |
-| GET | `/api/auth/me` | none | `200 {"user", "profile"}` |
-| PUT | `/api/profile` | profile fields | `200 {"profile"}` |
-
-Passwords must be 8 to 128 characters and are stored as scrypt hashes. Errors come back as `{"error": "..."}`: `400` for invalid input, `401` when not signed in or for a wrong email or password, `409` when the email is taken, and `429` after 10 failed sign-ins for one email within 15 minutes. That limit is kept in memory, so it resets when the backend restarts.
-
-The profile body uses the same shape the Crop Finder sends:
+### Farm profile body
 
 ```json
 {
@@ -282,13 +248,16 @@ The profile body uses the same shape the Crop Finder sends:
 
 `phone`, `farmName` and `soilType` may be `null`. The response adds `updatedAt`.
 
-## Project Goal
+## Known limits
 
-Our goal is to make agricultural information easier to access and help farmers make better decisions using climate data and artificial intelligence.
+- `crops.json` season lengths, soil textures and yields are approximate prototype values. Verify them before real agronomic use.
+- No rate limit on external API calls yet (NASA, Nominatim). Add one before public deployment.
+- The Overview's "Sample conditions" and "A season to plan for" panels are labelled demo data; no live weather feed is connected.
+- `debug=True` and the relaxed cookie flag in `python app.py` are for local development only.
 
-## Project Information
+## Project information
 
-- Project: ClimateAI
+- Project: ClimateCrop AI
 - Event: TechXpo 2026
 - Institution: University of Louisiana Monroe
 - Field: Artificial Intelligence and Agriculture
