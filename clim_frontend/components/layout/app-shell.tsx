@@ -31,6 +31,7 @@ const navigation = [
 const pageTitles: Record<string, string> = {
   "/dashboard": "Overview",
   "/crop-finder": "Crop Finder",
+  "/crop-finder/results": "Crop Results",
   "/season-comparison": "Season Comparison",
   "/improvement-plan": "Improvement Plan",
   "/planting-weather": "Planting & Weather",
@@ -75,7 +76,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
       </p>
       <nav aria-label="Main navigation" className="flex flex-col gap-1">
         {navigation.map(({ title, href, icon: Icon }) => {
-          const isActive = pathname === href;
+          const isActive = pathname === href || pathname.startsWith(`${href}/`);
           return (
             <Link
               key={href}
