@@ -43,6 +43,7 @@ CORS(app, resources={
     r"/api/locations/search": {},
     r"/api/crops/search": {},
     r"/api/season/compare": {},
+    r"/api/planting/plan": {},
 })
 app.register_blueprint(accounts.bp)
 app.teardown_appcontext(close_db)

@@ -8,7 +8,7 @@ import { SearchField } from "@/components/shared/search-field";
 import { HelpText, Panel, PanelHead, ResultItem, ResultList, buttonClass } from "@/components/shared/ui-kit";
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:5000";
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:5001";
 
 type LocationResult = { label: string; lat: number; lon: number };
 
