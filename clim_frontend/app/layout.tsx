@@ -1,34 +1,12 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Fraunces, Instrument_Sans, Martian_Mono } from 'next/font/google'
 import { AppShell } from '@/components/layout/app-shell'
 import 'leaflet/dist/leaflet.css'
 import './globals.css'
 
-// A light editorial serif for headlines and figures, a compact grotesk for everything a farmer reads or taps.
-
-// Interface and reading text: crisp and compact, so dense tables and labels still breathe.
-const instrumentSans = Instrument_Sans({
-  subsets: ['latin'],
-  variable: '--font-instrument-sans',
-  display: 'swap',
-})
-
-// Display: Fraunces with its soft and "wonky" axes off reads as a sharp, light editorial serif, like Canela.
-const fraunces = Fraunces({
-  subsets: ['latin'],
-  axes: ['opsz', 'SOFT', 'WONK'],
-  variable: '--font-fraunces',
-  display: 'swap',
-})
-
-// Coordinates and codes, narrowed a step so they sit beside the grotesk.
-const martianMono = Martian_Mono({
-  subsets: ['latin'],
-  axes: ['wdth'],
-  variable: '--font-martian-mono',
-  display: 'swap',
-})
+// One typeface for the whole site: General Sans (Indian Type Foundry, ITF Free Font License).
+// It is served by Fontshare, as the license allows, so no font files live in this repository.
+const FONT_CSS = 'https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap'
 
 export const metadata: Metadata = {
   title: {
@@ -62,7 +40,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${instrumentSans.variable} ${fraunces.variable} ${martianMono.variable}`}>
+    <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://api.fontshare.com" />
+        <link rel="preconnect" href="https://cdn.fontshare.com" crossOrigin="anonymous" />
+        {/* eslint-disable-next-line @next/next/no-page-custom-font -- one site-wide font in the root layout */}
+        <link rel="stylesheet" href={FONT_CSS} />
+      </head>
       <body className="antialiased">
         <AppShell>{children}</AppShell>
         {process.env.NODE_ENV === 'production' && <Analytics />}
