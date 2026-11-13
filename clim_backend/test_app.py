@@ -134,3 +134,31 @@ class FetchMonthlyClimateTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@patch.object(backend, "fetch_monthly_climate", return_value=(DES_MOINES_TEMP, DES_MOINES_RAIN))
+class HarvestEstimateTest(unittest.TestCase):
+    def estimate(self, **changes):
+        return app.test_client().post("/api/harvest-estimate", json={**FARM, "crop": "Maize", **changes})
+
+    def test_matches_the_crop_finder_scorer(self, _fetch):
+        body = self.estimate().get_json()
+        self.assertEqual((body["score"], body["lbPerAcre"], body["lbTotal"]), (100, 9800, 9800 * 40))
+        self.assertEqual(body["what"], "grain")
+        self.assertEqual(body["acres"], 40)
+
+    def test_display_name_soybeans_maps_to_the_scorer(self, _fetch):
+        body = self.estimate(crop="Soybeans").get_json()
+        self.assertEqual(body["crop"], "Soybeans")
+        self.assertIsNotNone(body["score"])
+
+    def test_poor_fit_has_no_harvest_and_no_size_has_no_total(self, _fetch):
+        rice = self.estimate(crop="Rice").get_json()  # rainfed rice scores 30 in Des Moines
+        self.assertIsNone(rice["lbPerAcre"])
+        no_size = self.estimate(farm={}).get_json()
+        self.assertEqual(no_size["lbPerAcre"], 9800)
+        self.assertIsNone(no_size["lbTotal"])
+
+    def test_bad_input(self, _fetch):
+        self.assertEqual(self.estimate(crop="Moonbeans").status_code, 400)
+        self.assertEqual(self.estimate(coordinates={"lat": 99, "lon": 0}).status_code, 400)

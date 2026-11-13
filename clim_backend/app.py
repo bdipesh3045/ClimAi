@@ -13,6 +13,7 @@ from crop_suitability import recommend_crops
 from services import planting, season, weather
 from services.climate import CLIMATOLOGY_LABEL, MONTH_KEYS, ClimateUnavailable, fetch_monthly_climate  # noqa: F401
 from services.crops import catalog_source, search_crops
+from services.journey_crops import DISPLAY_NAMES
 from db import close_db
 from validation import SOIL_TEXTURES, in_range, parse_coordinates, parse_farm_size, parse_soil  # noqa: F401
 
@@ -44,6 +45,7 @@ CORS(app, resources={
     r"/api/season/compare": {},
     r"/api/planting/plan": {},
     r"/api/weather/overview": {},
+    r"/api/harvest-estimate": {},
 })
 app.register_blueprint(accounts.bp)
 app.register_blueprint(plan.bp)
@@ -152,6 +154,45 @@ def weather_overview():
     if not (in_range(lat, -90, 90) and in_range(lon, -180, 180)):
         return jsonify({"error": "lat and lon are out of range."}), 400
     return jsonify(weather.overview(lat, lon, logger=app.logger)), 200
+
+
+@app.route("/api/harvest-estimate", methods=["POST"])
+def harvest_estimate():
+    """Expected harvest for one crop on one field: the Crop Finder scorer for a single crop.
+
+    Body: the Crop Finder farm fields (coordinates, soilType, farm, irrigation) plus "crop".
+    """
+    payload = request.get_json(silent=True)
+    if not isinstance(payload, dict):
+        return jsonify({"error": "Request body must be a JSON object."}), 400
+    try:
+        lat, lon, texture, irrigated, acres = parse_farm(payload)
+    except ValueError as error:
+        return jsonify({"error": str(error)}), 400
+    crop = payload.get("crop")
+    scorer_name = {display: name for name, display in DISPLAY_NAMES.items()}.get(crop, crop)
+    try:
+        temp, rain = fetch_monthly_climate(round(lat, 2), round(lon, 2))
+    except ClimateUnavailable:
+        app.logger.exception("Climate lookup failed for harvest estimate at lat=%s lon=%s", lat, lon)
+        return jsonify({"error": "Could not load climate data for this field. Please try again."}), 502
+    match = next((r for r in recommend_crops(temp, rain, texture=texture, irrigated=irrigated, acres=acres)
+                  if r["crop"] == scorer_name), None)
+    if match is None:
+        return jsonify({"error": "Choose a crop from the list."}), 400
+    return jsonify({
+        "crop": crop,
+        "score": match["score"],
+        "level": match["level"],
+        "mainLimit": match["main_limit"],
+        "lbPerAcre": match["harvest_lb_per_acre"],
+        "lbTotal": match["harvest_lb_total"],
+        "what": match["harvest_what"],
+        "acres": None if acres is None else round(acres, 1),
+        "soil": texture,
+        "irrigated": irrigated,
+        "source": f"Crop Finder scorer: typical good-year yield × fit to this field ({CLIMATOLOGY_LABEL}, FAO ECOCROP)",
+    }), 200
 
 
 @app.route("/api/crops/search", methods=["GET"])

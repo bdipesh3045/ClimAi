@@ -9,7 +9,7 @@ import { useJourneys } from "@/components/journeys/journey-store";
 import { ProgressBar } from "@/components/journeys/parts";
 import { JourneyTimeline } from "@/components/journeys/journey-timeline";
 import { AddEntryForm } from "@/components/journeys/add-entry-form";
-import { YieldPanel } from "@/components/journeys/yield-panel";
+import { HarvestEstimate } from "@/components/journeys/harvest-estimate";
 import { HealthPanel } from "@/components/journeys/health-panel";
 import { ExpertGuide } from "@/components/journeys/expert-guide";
 import {
@@ -109,6 +109,9 @@ function JourneyView({ journey }: { journey: Journey }) {
             <span>Harvest · {formatDate(expectedHarvest(journey))}</span>
           </div>
         </div>
+        <div className="mt-5">
+          <HarvestEstimate journey={journey} />
+        </div>
       </Panel>
 
       {/* 5. Journey overview strip */}
@@ -162,7 +165,6 @@ function JourneyView({ journey }: { journey: Journey }) {
 
         {/* 3 and 4. Model panels */}
         <div className="flex min-w-0 flex-col gap-6">
-          <YieldPanel initialCrop={journey.crop} />
           <HealthPanel journey={journey} />
         </div>
       </div>

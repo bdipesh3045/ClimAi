@@ -4,13 +4,12 @@
 // Each export has the same shape as the real thing that will replace it:
 //   MOCK_JOURNEYS        -> journeys from the backend (per account)
 //   MOCK_NEXT_ACTIONS    -> next-action rules or the AI
-//   mockYieldPredict()   -> POST /api/yield-predict (the yield model)
 //   mockHealthCheck()    -> the plant health image model
 //   MOCK_EXPERT_GUIDE, mockExpertReaction() -> the AI crop expert
 // Swap one function body at a time; the components do not need to change.
 // ===========================================================================
 
-import { SEASON_DAYS, addDays, todayIso, type ActionType, type Journey, type JourneyCrop, type YieldCrop } from "@/lib/journeys";
+import { SEASON_DAYS, addDays, todayIso, type ActionType, type Journey, type JourneyCrop } from "@/lib/journeys";
 
 // --------------------------------------------------------------- journeys
 
@@ -27,6 +26,7 @@ export function buildMockJourneys(): Journey[] {
       id: "soybeans-baton-rouge",
       crop: "Soybeans",
       location: "Baton Rouge, Louisiana",
+      coordinates: { lat: 30.4515, lon: -91.1871 },
       sownOn: soySown,
       seasonDays: SEASON_DAYS.Soybeans,
       sample: true,
@@ -49,6 +49,7 @@ export function buildMockJourneys(): Journey[] {
       id: "rice-crowley",
       crop: "Rice",
       location: "Crowley, Louisiana",
+      coordinates: { lat: 30.2141, lon: -92.3746 },
       sownOn: riceSown,
       seasonDays: SEASON_DAYS.Rice,
       sample: true,
@@ -105,56 +106,6 @@ export function mockNextAction(crop: JourneyCrop, day: number, seasonDays: numbe
     MOCK_NEXT_ACTIONS[crop] ??
     GENERIC_NEXT_ACTIONS.map(({ share, action }) => ({ day: Math.round(share * seasonDays), action }));
   return list.find((item) => item.day >= day) ?? null;
-}
-
-// --------------------------------------------------------------- yield model
-
-export type YieldInput = {
-  crop: YieldCrop;
-  rainfallMm: number;
-  tempC: number;
-  pesticidesTonnes: number;
-};
-
-/** Same shape as the planned POST /api/yield-predict response. */
-export type YieldPrediction = {
-  predictedYieldHgHa: number;
-  baselineYieldHgHa: number;
-  pctChange: number;
-  why: Array<{ feature: "rainfall" | "temperature" | "pesticides"; importance: number }>;
-  decisionPath: string[];
-  source: string;
-};
-
-// Mock curve: a smooth made-up response around each crop's typical yield. Not a model.
-const MOCK_YIELD = {
-  Soybeans: { baseline: 15533, bias: 16.7, tempOpt: 20.5, tempK: 0.554, rainOpt: 1150, rainK: 39.8, pestK: 4,
-    why: { pesticides: 0.51, temperature: 0.28, rainfall: 0.21 } },
-  Rice: { baseline: 35878, bias: 8.7, tempOpt: 26, tempK: 0.4, rainOpt: 1600, rainK: 30, pestK: 3,
-    why: { rainfall: 0.55, temperature: 0.27, pesticides: 0.18 } },
-} as const;
-
-/**
- * PLUG-IN: replace this body with
- *   const res = await fetch(`${API_BASE}/api/yield-predict`, { method: "POST", body: JSON.stringify(input), ... })
- *   return (await res.json()) as YieldPrediction
- */
-export async function mockYieldPredict(input: YieldInput): Promise<YieldPrediction> {
-  const m = MOCK_YIELD[input.crop];
-  const temp = -m.tempK * (input.tempC - m.tempOpt) ** 2;
-  const rain = -m.rainK * ((input.rainfallMm - m.rainOpt) / 1000) ** 2;
-  const pest = m.pestK * Math.log(Math.max(input.pesticidesTonnes, 100) / 37_000);
-  const pctChange = Math.round(Math.max(-80, Math.min(80, m.bias + temp + rain + pest)) * 10) / 10;
-  return {
-    predictedYieldHgHa: Math.round(m.baseline * (1 + pctChange / 100)),
-    baselineYieldHgHa: m.baseline,
-    pctChange,
-    why: (Object.entries(m.why) as Array<[YieldPrediction["why"][number]["feature"], number]>)
-      .map(([feature, importance]) => ({ feature, importance }))
-      .sort((a, b) => b.importance - a.importance),
-    decisionPath: [], // the real model returns the rule it followed; the panel shows a slot for it
-    source: "Demo data. The trained yield model will replace these numbers.",
-  };
 }
 
 // --------------------------------------------------------------- health model
