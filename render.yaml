@@ -1,0 +1,18 @@
+# Render blueprint for the Flask API (free plan). In Render: New > Blueprint > pick this repo.
+services:
+  - type: web
+    name: climai-backend
+    runtime: python
+    plan: free
+    rootDir: clim_backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --threads 4 --timeout 60
+    healthCheckPath: /api/health
+    # Deploy a push to main only after the GitHub Actions checks pass.
+    autoDeployTrigger: checksPass
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.1"
+      # Signs the sign-in cookie. Render generates a random value once and keeps it.
+      - key: CLIMAI_SECRET_KEY
+        generateValue: true

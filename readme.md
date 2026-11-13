@@ -128,9 +128,55 @@ Restart the frontend after changing environment variables.
 
 ```bash
 cd clim_backend
-python -m unittest test_app test_accounts test_plan
+python -m unittest              # all backend tests
 python crop_suitability.py      # scorer self-check
+
+cd ../clim_frontend
+pnpm test                       # frontend unit tests
 ```
+
+## Deploying a demo
+
+The demo setup is free and needs no servers to manage:
+
+- The **frontend** runs on Vercel.
+- The **backend** runs on Render.
+- **GitHub Actions** (`.github/workflows/ci.yml`) runs the backend tests and the frontend type check, tests and build on every push and pull request.
+
+Both hosts deploy automatically when you push to `main`, and Render waits for CI to pass first.
+
+```
+git push ──> GitHub Actions (tests + build)
+         ├─> Render: Flask API   (deploys after checks pass)
+         └─> Vercel: Next.js app (builds and deploys on every push)
+```
+
+### 1. Backend on Render (once)
+
+1. Sign in to [render.com](https://render.com) with GitHub.
+2. Choose **New > Blueprint**, then pick this repository. Render reads `render.yaml`, which sets up a free Python web service with a generated `CLIMAI_SECRET_KEY`.
+3. When it is live, open `https://<your-service>.onrender.com/api/health`. It should say `healthy`. Copy this URL for the next step.
+
+### 2. Frontend on Vercel (once)
+
+1. Sign in to [vercel.com](https://vercel.com) with GitHub and import this repository.
+2. Set **Root Directory** to `clim_frontend`. The framework (Next.js) is detected automatically.
+3. Add these environment variables, replacing `<api>` with the Render URL from step 1:
+
+| Variable | Value |
+|---|---|
+| `BACKEND_URL` | `<api>` |
+| `NEXT_PUBLIC_API_BASE_URL` | `<api>` |
+| `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` | `<api>/api/crop-analysis` |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Your Gemini key (only needed for the AI Assistant) |
+| `ENABLE_EXPERIMENTAL_COREPACK` | `1`, so Vercel uses the pnpm version pinned in `package.json` |
+
+4. Deploy. Every later push to `main` redeploys, and pull requests get their own preview links.
+
+### Demo limits (fine for showing the project, not for real users)
+
+- **Render's free plan sleeps after 15 minutes without traffic.** The first request after that takes about a minute, so open the site a minute before you present.
+- **The SQLite database is wiped whenever Render redeploys or restarts the service.** Accounts, profiles, plan ticks and notes then disappear, so sign up again after a deploy. For data that lasts, add a Render disk (paid) and set `CLIMAI_DB_PATH` to a path on it.
 
 ## API reference
 
