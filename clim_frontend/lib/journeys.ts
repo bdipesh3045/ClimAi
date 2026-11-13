@@ -1,7 +1,13 @@
 // Crop Journey: types and plain date helpers. These stay when real journey data replaces
 // the mocks in lib/journeys-mock.ts.
 
-export type JourneyCrop = "Soybeans" | "Rice";
+/** Any crop from clim_backend/crops.json (served by GET /backend/journeys/crops). */
+export type JourneyCrop = string;
+/** Crops the yield model covers. */
+export type YieldCrop = "Soybeans" | "Rice";
+export const YIELD_CROPS: YieldCrop[] = ["Soybeans", "Rice"];
+
+export type CropOption = { name: string; category: string; seasonDays: number };
 export type ActionType = "sowing" | "watering" | "pesticide" | "fertilizer" | "photo" | "note";
 
 export type JourneyEntry = {
@@ -26,10 +32,8 @@ export type Journey = {
   entries: JourneyEntry[];
 };
 
-export const JOURNEY_CROPS: JourneyCrop[] = ["Soybeans", "Rice"];
-
-// Days from planting to harvest, the same values as clim_backend/crops.json (Soybean 120, Rice 130).
-export const SEASON_DAYS: Record<JourneyCrop, number> = { Soybeans: 120, Rice: 130 };
+// Days from planting to harvest for the sample journeys, the same values as clim_backend/crops.json.
+export const SEASON_DAYS: Record<YieldCrop, number> = { Soybeans: 120, Rice: 130 };
 
 export const ACTION_LABELS: Record<ActionType, string> = {
   sowing: "Sowing",

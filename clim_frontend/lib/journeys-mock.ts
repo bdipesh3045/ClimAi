@@ -10,7 +10,7 @@
 // Swap one function body at a time; the components do not need to change.
 // ===========================================================================
 
-import { SEASON_DAYS, addDays, todayIso, type ActionType, type Journey, type JourneyCrop } from "@/lib/journeys";
+import { SEASON_DAYS, addDays, todayIso, type ActionType, type Journey, type JourneyCrop, type YieldCrop } from "@/lib/journeys";
 
 // --------------------------------------------------------------- journeys
 
@@ -72,7 +72,7 @@ export function buildMockJourneys(): Journey[] {
 // --------------------------------------------------------------- next actions
 
 /** Typical next jobs by day of the season. PLUG-IN: replace with rules or the AI. */
-export const MOCK_NEXT_ACTIONS: Record<JourneyCrop, Array<{ day: number; action: string }>> = {
+export const MOCK_NEXT_ACTIONS: Record<string, Array<{ day: number; action: string }>> = {
   Soybeans: [
     { day: 7, action: "Check emergence and stand count" },
     { day: 21, action: "Scout for weeds and insects" },
@@ -91,14 +91,26 @@ export const MOCK_NEXT_ACTIONS: Record<JourneyCrop, Array<{ day: number; action:
   ],
 };
 
-export function mockNextAction(crop: JourneyCrop, day: number) {
-  return MOCK_NEXT_ACTIONS[crop].find((item) => item.day >= day) ?? null;
+/** General jobs for crops without their own list, placed by share of the season. */
+const GENERIC_NEXT_ACTIONS: Array<{ share: number; action: string }> = [
+  { share: 0.08, action: "Check emergence and the stand" },
+  { share: 0.25, action: "Scout for weeds and pests" },
+  { share: 0.5, action: "Watch water and pests at flowering" },
+  { share: 0.85, action: "Plan the harvest" },
+  { share: 1, action: "Harvest" },
+];
+
+export function mockNextAction(crop: JourneyCrop, day: number, seasonDays: number) {
+  const list =
+    MOCK_NEXT_ACTIONS[crop] ??
+    GENERIC_NEXT_ACTIONS.map(({ share, action }) => ({ day: Math.round(share * seasonDays), action }));
+  return list.find((item) => item.day >= day) ?? null;
 }
 
 // --------------------------------------------------------------- yield model
 
 export type YieldInput = {
-  crop: JourneyCrop;
+  crop: YieldCrop;
   rainfallMm: number;
   tempC: number;
   pesticidesTonnes: number;
@@ -151,10 +163,11 @@ export type HealthResult =
   | { status: "healthy"; confidence: number }
   | { status: "defect"; name: string; confidence: number };
 
-const MOCK_DEFECTS: Record<JourneyCrop, string[]> = {
+const MOCK_DEFECTS: Record<string, string[]> = {
   Soybeans: ["Frogeye leaf spot", "Septoria brown spot"],
   Rice: ["Rice blast", "Brown spot"],
 };
+const GENERIC_DEFECTS = ["Leaf spot", "Possible nutrient deficiency"];
 
 /**
  * PLUG-IN: replace this body with the image model call, e.g.
@@ -168,7 +181,7 @@ export async function mockHealthCheck(file: File, crop: JourneyCrop): Promise<He
   const seed = file.size;
   const confidence = 0.78 + (seed % 17) / 100;
   if (seed % 3 === 0) return { status: "healthy", confidence };
-  const defects = MOCK_DEFECTS[crop];
+  const defects = MOCK_DEFECTS[crop] ?? GENERIC_DEFECTS;
   return { status: "defect", name: defects[seed % defects.length], confidence };
 }
 
@@ -192,7 +205,7 @@ export type ExpertStage = {
 };
 
 /** Stage-by-stage playbook per crop. PLUG-IN: the AI expert replaces this. */
-export const MOCK_EXPERT_GUIDE: Record<JourneyCrop, ExpertStage[]> = {
+export const MOCK_EXPERT_GUIDE: Record<string, ExpertStage[]> = {
   Soybeans: [
     {
       stage: "Germination",
@@ -291,6 +304,61 @@ export const MOCK_EXPERT_GUIDE: Record<JourneyCrop, ExpertStage[]> = {
     },
   ],
 };
+
+/** General playbook for crops without their own. Step ids are prefixed "gen-". */
+const GENERIC_EXPERT_GUIDE: ExpertStage[] = [
+  {
+    stage: "Germination",
+    summary: "The crop is getting established. An even stand now sets up the rest of the season.",
+    steps: [
+      { id: "gen-moisture", title: "Keep the seedbed moist", why: "Seeds and young plants need steady moisture to establish evenly.", logsAs: "watering" },
+      { id: "gen-stand", title: "Check the stand for gaps", why: "Gaps found early can still be replanted.", logsAs: "note" },
+    ],
+    watchFor: ["Soil crusting after heavy rain", "Seedlings dying off in wet, cold soil"],
+  },
+  {
+    stage: "Growing",
+    summary: "The plants are building leaves and roots. Keep competition and pests down.",
+    steps: [
+      { id: "gen-weeds", title: "Control weeds early", why: "Weeds take the most yield while the crop is young.", logsAs: "pesticide" },
+      { id: "gen-feed", title: "Feed the crop if it looks pale", why: "Pale, slow growth often means the crop needs nutrients.", logsAs: "fertilizer" },
+      { id: "gen-scout", title: "Scout for pests weekly", why: "Pests are cheapest to manage before numbers build up.", logsAs: "note" },
+    ],
+    watchFor: ["Leaf damage from insects", "Yellowing leaves"],
+  },
+  {
+    stage: "Flowering",
+    summary: "The crop is flowering or forming its harvest. Stress now costs the most.",
+    steps: [
+      { id: "gen-water", title: "Keep water steady", why: "Drought during flowering and fruit set does the most damage.", logsAs: "watering" },
+      { id: "gen-disease", title: "Check leaves for disease", why: "Disease spreads fast in warm, humid weather.", logsAs: "photo" },
+    ],
+    watchFor: ["Wilting in the afternoon heat", "Spots or mould on leaves"],
+  },
+  {
+    stage: "Maturing",
+    summary: "The harvest is filling out. Protect it and get ready to harvest.",
+    steps: [
+      { id: "gen-plan", title: "Plan the harvest", why: "Harvesting at the right moment protects both yield and quality.", logsAs: "note" },
+    ],
+    watchFor: ["Storm damage or lodging", "Late pests"],
+  },
+  {
+    stage: "Ready to harvest",
+    summary: "The season is done. Harvest promptly and write down what you learned.",
+    steps: [
+      { id: "gen-harvest", title: "Harvest", why: "Delays risk weather damage and lower quality.", logsAs: "note" },
+      { id: "gen-record", title: "Record the yield", why: "Your own numbers make next season's plan sharper than any average.", logsAs: "note" },
+    ],
+    watchFor: ["Rain delays at harvest"],
+  },
+];
+
+/** The crop's own playbook, or the general one when there isn't one yet. */
+export function expertGuideFor(crop: JourneyCrop): { stages: ExpertStage[]; general: boolean } {
+  const own = MOCK_EXPERT_GUIDE[crop];
+  return own ? { stages: own, general: false } : { stages: GENERIC_EXPERT_GUIDE, general: true };
+}
 
 /** Steps the sample journeys have already completed, so the guide looks lived-in. */
 export const MOCK_DONE_STEPS: Record<string, string[]> = {

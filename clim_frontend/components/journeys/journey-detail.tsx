@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { ArrowLeft, CalendarClock, Camera, ClipboardList, Plus, Route, Sprout } from "lucide-react";
 import { Panel, PanelHead, Pill, Skeleton, Spec, SpecGrid, StateBlock, buttonClass } from "@/components/shared/ui-kit";
+import { X } from "lucide-react";
 import { useJourneys } from "@/components/journeys/journey-store";
 import { ProgressBar } from "@/components/journeys/parts";
 import { JourneyTimeline } from "@/components/journeys/journey-timeline";
@@ -49,7 +50,7 @@ export function JourneyDetail({ id }: { id: string }) {
           </Link>
         }
       >
-        This journey doesn’t exist anymore. Sample and new journeys reset when the page is refreshed.
+        This journey doesn’t exist or belongs to another account.
       </StateBlock>
     );
   }
@@ -59,10 +60,11 @@ export function JourneyDetail({ id }: { id: string }) {
 
 function JourneyView({ journey }: { journey: Journey }) {
   const [adding, setAdding] = useState(false);
+  const { syncError, clearSyncError } = useJourneys();
   const day = daysSinceSowing(journey);
   const stage = stageFor(journey);
   const photo = lastPhoto(journey);
-  const next = mockNextAction(journey.crop, day);
+  const next = mockNextAction(journey.crop, day, journey.seasonDays);
   const share = progress(journey);
 
   return (
@@ -71,6 +73,15 @@ function JourneyView({ journey }: { journey: Journey }) {
         <ArrowLeft size={15} aria-hidden="true" />
         My journeys
       </Link>
+
+      {syncError && (
+        <div role="alert" className="flex items-start justify-between gap-3 rounded-[12px] border border-clay/30 bg-clay-tint px-4 py-3 text-[14px] text-clay-ink">
+          <span>{syncError} The change was undone.</span>
+          <button type="button" onClick={clearSyncError} aria-label="Dismiss" className="shrink-0 text-clay-ink/70 hover:text-clay-ink">
+            <X size={16} aria-hidden="true" />
+          </button>
+        </div>
+      )}
 
       {/* 1. Header */}
       <Panel tone="readout" className="animate-rise p-5 sm:p-6" aria-labelledby="journey-heading">
@@ -84,7 +95,7 @@ function JourneyView({ journey }: { journey: Journey }) {
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
-            {journey.sample && <Pill tone="neutral">Sample journey</Pill>}
+            <Pill tone="neutral">{journey.sample ? "Sample journey" : "Saved"}</Pill>
             <Pill tone="good" className="py-1.5 text-[13px]">
               {stage} — Day {day}
             </Pill>

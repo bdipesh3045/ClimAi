@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { ArrowRight, Plus, Route } from "lucide-react";
+import { ArrowRight, Plus, Route, Search, X } from "lucide-react";
 import { PageIntro } from "@/components/shared/page-intro";
 import { useAppData } from "@/components/providers/app-data-provider";
 import {
@@ -12,29 +12,38 @@ import {
   Panel,
   PanelHead,
   Pill,
-  Segmented,
+  ResultItem,
+  ResultList,
   Skeleton,
   StateBlock,
   buttonClass,
   inputClass,
 } from "@/components/shared/ui-kit";
 import { useJourneys } from "@/components/journeys/journey-store";
+import { apiFetch, errorText } from "@/lib/api";
 import { ProgressBar } from "@/components/journeys/parts";
 import {
   ACTION_LABELS,
-  JOURNEY_CROPS,
   daysSinceSowing,
   formatDate,
   progress,
   sortedEntries,
   stageFor,
   todayIso,
+  type CropOption,
   type Journey,
   type JourneyCrop,
 } from "@/lib/journeys";
 
+// Shown if the crop list can't load, so a journey can still be started.
+const FALLBACK_CROPS: CropOption[] = [
+  { name: "Soybeans", category: "legume", seasonDays: 120 },
+  { name: "Rice", category: "cereal", seasonDays: 130 },
+];
+
+
 export function JourneyList() {
-  const { journeys } = useJourneys();
+  const { journeys, loadError, retryLoad } = useJourneys();
   const [creating, setCreating] = useState(false);
 
   return (
@@ -52,6 +61,20 @@ export function JourneyList() {
 
       {creating && <NewJourneyForm onClose={() => setCreating(false)} />}
 
+      {loadError && (
+        <StateBlock
+          kind="error"
+          title="Your saved journeys could not be loaded"
+          action={
+            <button type="button" onClick={retryLoad} className={buttonClass({ variant: "danger", size: "sm" })}>
+              Try again
+            </button>
+          }
+        >
+          {loadError} The sample journeys below still work.
+        </StateBlock>
+      )}
+
       {journeys === null ? (
         <div className="grid gap-6 md:grid-cols-2" aria-hidden="true">
           <Skeleton className="h-[220px]" />
@@ -62,9 +85,9 @@ export function JourneyList() {
           Start one with New journey.
         </StateBlock>
       ) : (
-        <ul className="grid animate-rise gap-6 md:grid-cols-2">
+        <ul className="grid animate-rise grid-cols-1 gap-6 md:grid-cols-2">
           {journeys.map((journey) => (
-            <li key={journey.id}>
+            <li key={journey.id} className="min-w-0">
               <JourneyCard journey={journey} />
             </li>
           ))}
@@ -109,7 +132,7 @@ function JourneyCard({ journey }: { journey: Journey }) {
       <div className="mt-4 flex items-center justify-between">
         <span className="text-[12.5px] text-ink-mute">
           {journey.entries.length} action{journey.entries.length === 1 ? "" : "s"} logged
-          {journey.sample ? " · Sample journey" : ""}
+          {journey.sample ? " · Sample journey" : " · Saved"}
         </span>
         <span className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-forest">
           Open journey
@@ -124,32 +147,119 @@ function NewJourneyForm({ onClose }: { onClose: () => void }) {
   const { addJourney } = useJourneys();
   const { location: savedLocation } = useAppData();
   const router = useRouter();
-  const [crop, setCrop] = useState<JourneyCrop>("Soybeans");
+  const [crop, setCrop] = useState<JourneyCrop | null>("Soybeans");
+  const [crops, setCrops] = useState<CropOption[]>(FALLBACK_CROPS);
+  const [cropQuery, setCropQuery] = useState("");
+  const [browsing, setBrowsing] = useState(false);
+
+  useEffect(() => {
+    apiFetch("/journeys/crops")
+      .then((data) => {
+        const list = (data as { crops?: CropOption[] } | null)?.crops;
+        if (Array.isArray(list) && list.length > 0) setCrops(list);
+      })
+      .catch(() => setCrops(FALLBACK_CROPS));
+  }, []);
+  const selected = crops.find((c) => c.name === crop);
+  const q = cropQuery.trim().toLowerCase();
+  const matches = crops.filter(
+    (c) => !q || c.name.toLowerCase().includes(q) || c.category.toLowerCase().includes(q),
+  );
+  const showList = browsing || q.length > 0;
+
+  function chooseCrop(name: string) {
+    setCrop(name);
+    setCropQuery("");
+    setBrowsing(false);
+    setError("");
+  }
   const [sownOn, setSownOn] = useState(todayIso());
   const [location, setLocation] = useState(savedLocation);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  function submit(event: React.FormEvent) {
+  async function submit(event: React.FormEvent) {
     event.preventDefault();
+    if (!crop) return setError("Search for a crop and pick it from the list.");
     if (!location.trim()) return setError("Add where the crop is growing.");
+    if (!sownOn) return setError("Pick the sowing date.");
     if (sownOn > todayIso()) return setError("The sowing date can't be in the future.");
-    const id = addJourney({ crop, sownOn, location: location.trim() });
-    router.push(`/journeys/${id}`);
+    setSaving(true);
+    setError("");
+    try {
+      const id = await addJourney({ crop: crop as JourneyCrop, sownOn, location: location.trim() });
+      router.push(`/journeys/${id}`);
+    } catch (failure) {
+      setError(errorText(failure, "The journey could not be saved. Please try again."));
+      setSaving(false);
+    }
   }
 
   return (
     <Panel tone="readout" className="animate-rise p-5 sm:p-6" aria-labelledby="new-journey-heading">
-      <PanelHead id="new-journey-heading" icon={Plus} title="Start a journey" description="Pick the crop and when it was sown." />
-      <form onSubmit={submit} className="mt-5 grid gap-4 md:grid-cols-[auto_minmax(0,1fr)_minmax(0,1.4fr)] md:items-end">
-        <div>
-          <p className="mb-1.5 text-[13px] font-semibold text-ink-soft">Crop</p>
-          <Segmented<JourneyCrop>
-            ariaLabel="Crop"
-            value={crop}
-            onChange={setCrop}
-            options={JOURNEY_CROPS.map((value) => ({ value, label: value }))}
-          />
-        </div>
+      <PanelHead
+        id="new-journey-heading"
+        icon={Plus}
+        title="Start a journey"
+        description="Pick the crop and when it was sown. It is saved to your account."
+      />
+      <form onSubmit={submit} className="mt-5 grid gap-4 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1.4fr)] md:items-start">
+        <Field label="Crop" htmlFor="journey-crop">
+          <div className="relative">
+            <Search
+              size={16}
+              className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-mute"
+              aria-hidden="true"
+            />
+            <input
+              id="journey-crop"
+              type="search"
+              value={cropQuery}
+              onChange={(e) => setCropQuery(e.target.value)}
+              onFocus={() => setBrowsing(true)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && matches[0]) {
+                  e.preventDefault();
+                  chooseCrop(matches[0].name);
+                }
+                if (e.key === "Escape") setBrowsing(false);
+              }}
+              placeholder={`Search ${crops.length} crops: maize, cotton, tomato…`}
+              autoComplete="off"
+              className={`${inputClass} pl-9`}
+            />
+          </div>
+          {showList &&
+            (matches.length > 0 ? (
+              <ResultList label="Matching crops">
+                {matches.map((item) => (
+                  <ResultItem
+                    key={item.name}
+                    onSelect={() => chooseCrop(item.name)}
+                    primary={item.name}
+                    secondary={item.category}
+                    meta={`About ${item.seasonDays} days from sowing to harvest`}
+                  />
+                ))}
+              </ResultList>
+            ) : (
+              <HelpText>No crop matches “{cropQuery.trim()}”. Try another name.</HelpText>
+            ))}
+          {selected && !showList && (
+            <div className="mt-2.5 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setCrop(null)}
+                aria-label={`Remove ${selected.name}`}
+                className="group inline-flex h-9 items-center gap-1.5 rounded-full bg-forest pr-2.5 pl-3.5 text-[13px] font-semibold text-white transition-colors hover:bg-forest-deep"
+              >
+                {selected.name}
+                <X size={14} className="opacity-70 group-hover:opacity-100" aria-hidden="true" />
+              </button>
+              <span className="text-[12.5px] text-ink-mute">About {selected.seasonDays} days to harvest</span>
+            </div>
+          )}
+        </Field>
         <Field label="Sowing date" htmlFor="journey-sown">
           <input
             id="journey-sown"
@@ -171,8 +281,8 @@ function NewJourneyForm({ onClose }: { onClose: () => void }) {
           />
         </Field>
         <div className="flex gap-3 md:col-span-3">
-          <button type="submit" className={buttonClass()}>
-            Start journey
+          <button type="submit" disabled={saving} className={buttonClass()}>
+            {saving ? "Saving…" : "Start journey"}
           </button>
           <button type="button" onClick={onClose} className={buttonClass({ variant: "ghost" })}>
             Cancel

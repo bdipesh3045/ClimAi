@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { TrendingUp } from "lucide-react";
 import { Panel, PanelHead, Pill, Segmented, SourceNote } from "@/components/shared/ui-kit";
-import { JOURNEY_CROPS, type JourneyCrop } from "@/lib/journeys";
+import { YIELD_CROPS, type JourneyCrop, type YieldCrop } from "@/lib/journeys";
 // PLUG-IN: swap mockYieldPredict for the real POST /api/yield-predict call (same input and output types).
 import { mockYieldPredict, type YieldPrediction } from "@/lib/journeys-mock";
 import { cn } from "@/lib/utils";
@@ -18,7 +18,8 @@ type SliderKey = (typeof SLIDERS)[number]["key"];
 const FEATURE_LABELS = { rainfall: "Rainfall", temperature: "Temperature", pesticides: "Pesticides" } as const;
 
 export function YieldPanel({ initialCrop }: { initialCrop: JourneyCrop }) {
-  const [crop, setCrop] = useState<JourneyCrop>(initialCrop);
+  const covered = (YIELD_CROPS as string[]).includes(initialCrop);
+  const [crop, setCrop] = useState<YieldCrop>(covered ? (initialCrop as YieldCrop) : "Soybeans");
   const [values, setValues] = useState<Record<SliderKey, number>>({ rainfallMm: 1150, tempC: 20.5, pesticidesTonnes: 37_000 });
   const [result, setResult] = useState<YieldPrediction | null>(null);
 
@@ -45,12 +46,17 @@ export function YieldPanel({ initialCrop }: { initialCrop: JourneyCrop }) {
         action={<Pill tone="warn">Demo data</Pill>}
       />
 
-      <Segmented<JourneyCrop>
+      {!covered && (
+        <p className="mt-4 rounded-[10px] bg-marigold-tint px-3 py-2 text-[13px] leading-[1.5] text-marigold-ink">
+          The yield model covers Soybeans and Rice, not {initialCrop.toLowerCase()} yet. Try it with one of those.
+        </p>
+      )}
+      <Segmented<YieldCrop>
         ariaLabel="Crop"
         className="mt-4 w-full"
         value={crop}
         onChange={setCrop}
-        options={JOURNEY_CROPS.map((value) => ({ value, label: value }))}
+        options={YIELD_CROPS.map((value) => ({ value, label: value }))}
       />
 
       <div className="mt-5 rounded-[12px] border border-line bg-paper p-4 text-center" aria-live="polite">

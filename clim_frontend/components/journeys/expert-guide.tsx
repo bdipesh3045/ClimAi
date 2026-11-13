@@ -16,7 +16,7 @@ import {
   type Journey,
 } from "@/lib/journeys";
 // PLUG-IN: the AI crop expert replaces MOCK_EXPERT_GUIDE and mockExpertReaction (same shapes).
-import { MOCK_EXPERT_GUIDE, mockExpertReaction } from "@/lib/journeys-mock";
+import { expertGuideFor, mockExpertReaction } from "@/lib/journeys-mock";
 import { cn } from "@/lib/utils";
 
 /** The expert walking the farmer through each stage: what to do now, why, and what to watch for. */
@@ -29,7 +29,8 @@ export function ExpertGuide({ journey }: { journey: Journey }) {
 
   const stageName = stages[viewing].name;
   // ---- PLUG-IN POINT: guidance for this stage comes from the AI expert ----
-  const guide = MOCK_EXPERT_GUIDE[journey.crop].find((g) => g.stage === stageName);
+  const playbook = expertGuideFor(journey.crop);
+  const guide = playbook.stages.find((g) => g.stage === stageName);
   const done = new Set(doneSteps[journey.id] ?? []);
   const doneCount = guide ? guide.steps.filter((step) => done.has(step.id)).length : 0;
   const latest = sortedEntries(journey)[0];
@@ -47,7 +48,11 @@ export function ExpertGuide({ journey }: { journey: Journey }) {
         id="expert-heading"
         icon={GraduationCap}
         title="Your crop expert"
-        description={`Guidance for each stage of your ${journey.crop.toLowerCase()}, from sowing to harvest.`}
+        description={
+          playbook.general
+            ? `General guidance for each stage, from sowing to harvest. A ${journey.crop.toLowerCase()}-specific playbook comes with the AI expert.`
+            : `Guidance for each stage of your ${journey.crop.toLowerCase()}, from sowing to harvest.`
+        }
         action={<Pill tone="warn">Demo data</Pill>}
       />
 

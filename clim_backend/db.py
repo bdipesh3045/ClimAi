@@ -1,4 +1,4 @@
-"""SQLite storage for farmer accounts and profiles. One connection per request."""
+"""SQLite storage for farmer accounts, profiles, plans and crop journeys. One connection per request."""
 import sqlite3
 
 from flask import current_app, g
@@ -42,6 +42,31 @@ CREATE TABLE IF NOT EXISTS field_notes (
     created_at TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS field_notes_by_user ON field_notes (user_id, id);
+CREATE TABLE IF NOT EXISTS journeys (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id     INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    crop        TEXT NOT NULL,
+    location    TEXT NOT NULL,
+    sown_on     TEXT NOT NULL,
+    season_days INTEGER NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS journeys_by_user ON journeys (user_id, id);
+CREATE TABLE IF NOT EXISTS journey_entries (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    journey_id  INTEGER NOT NULL REFERENCES journeys(id) ON DELETE CASCADE,
+    entry_date  TEXT NOT NULL,
+    action      TEXT NOT NULL,
+    details     TEXT NOT NULL,
+    created_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS journey_entries_by_journey ON journey_entries (journey_id, id);
+CREATE TABLE IF NOT EXISTS journey_steps (
+    journey_id  INTEGER NOT NULL REFERENCES journeys(id) ON DELETE CASCADE,
+    step_id     TEXT NOT NULL,
+    done_at     TEXT NOT NULL,
+    PRIMARY KEY (journey_id, step_id)
+);
 """
 
 

@@ -17,7 +17,7 @@ Every number shown is either sourced real data or clearly labelled as a sample. 
 | Season Comparison | Compares a past season (or a 3- or 5-year average) with the Open-Meteo seasonal outlook over the farmer's growing window. Shows climate risks, a verdict for each crop (Continue, Monitor, Reconsider) and next steps. | NASA POWER monthly and daily, Open-Meteo seasonal (ECMWF SEAS5), FAO ECOCROP |
 | Planting & Weather | Finds the months whose mean temperature is inside a crop's ECOCROP optimum, and the longest unbroken window. Charts how far each month sits from the optimum, plus rain during the window. | NASA POWER (30-year normal by default, or the last 1, 3 or 5 years), FAO ECOCROP |
 | Improvement Plan | Builds a season plan on the server from the saved profile: soil, water, variety and timing tasks with due months, plus field notes. | Farm profile, NASA POWER 30-year climatology, crop scorer |
-| Crop Journeys (preview) | Follows one crop from sowing to harvest: a stage-by-stage crop expert that says what to do now and why, a timeline of everything done to it, its stage and progress, and slots for the yield prediction and plant health models. Runs on clearly labelled mock data until those models are connected. | Mock data (`clim_frontend/lib/journeys-mock.ts`) |
+| Crop Journeys (preview) | Follows one crop from sowing to harvest: a stage-by-stage crop expert that says what to do now and why, a timeline of everything done to it, its stage and progress, and slots for the yield prediction and plant health models. Journeys, entries and ticked steps are saved per account; the models and expert run on clearly labelled mock data until they are connected. | SQLite (`journeys.py`), mock data (`clim_frontend/lib/journeys-mock.ts`) |
 | AI Assistant | Answers farming questions in plain language using the farmer's profile as context. | Google Gemini (server-side) |
 | Overview | Location search with a satellite map, live conditions, the 30-year climate normal, active weather alerts (US only), and the next tasks from the season plan. | OpenStreetMap Nominatim, Open-Meteo forecast, US National Weather Service, NASA POWER, season plan |
 | Farm Profile, sign-up and sign-in | Farmer accounts and the saved farm details every tool starts from. | SQLite, OpenStreetMap Nominatim (location picker, called from the browser) |
@@ -67,7 +67,8 @@ climAi/
 │   │   ├── weather.py            Overview: live conditions, NWS alerts, climate normal
 │   │   └── season_plan.py        Season plan tasks
 │   ├── data/ecocrop.csv          Cached ECOCROP database
-│   └── test_app.py, test_accounts.py, test_plan.py, test_weather.py
+│   ├── journeys.py           Crop journeys, entries and expert steps (signed-in)
+│   └── test_app.py, test_accounts.py, test_plan.py, test_weather.py, test_journeys.py
 ├── clim_frontend/                Next.js app (port 3000)
 │   ├── app/                      Pages and the assistant API route
 │   ├── components/               Page components and the shared UI kit
@@ -213,6 +214,11 @@ The browser calls `/backend/*` on the Next.js site, and `next.config.mjs` forwar
 | GET | `/api/notes` | none | `200 {"notes": [...]}`, newest first |
 | POST | `/api/notes` | `{"crop", "date", "challenge", "notes"}` | `201 {"note"}` |
 | DELETE | `/api/notes/<id>` | none | `204` (`404` for another farmer's note) |
+| GET | `/api/journeys/crops` | none | `200 {"crops": [{"name", "category", "seasonDays"}]}`, the 30 crops in `crops.json` |
+| GET | `/api/journeys` | none | `200 {"journeys": [...]}`, newest first, each with `entries` and `doneSteps` |
+| POST | `/api/journeys` | `{"crop" (any name from /api/journeys/crops), "sownOn", "location"}` | `201 {"journey"}`, with its sowing entry |
+| POST | `/api/journeys/<id>/entries` | `{"date", "type", "details"}` | `201 {"entry"}` (`404` for another farmer's journey) |
+| PUT | `/api/journeys/<id>/steps/<step_id>` | `{"done": true}` | `200 {"id", "done"}` |
 
 Passwords must be 8 to 128 characters and are stored as scrypt hashes. Sign-in returns `429` after 10 failed attempts for one email within 15 minutes; that count is kept in memory and resets when the backend restarts.
 
