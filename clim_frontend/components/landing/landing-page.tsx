@@ -69,22 +69,22 @@ const tools: Array<{ title: string; href: string; icon: LucideIcon; body: string
     title: "Crop Finder",
     href: "/crop-finder",
     icon: Sprout,
-    body: "Describe your farm, fields, goals and challenges. Crop recommendations from these details are in development.",
-    data: "Your farm details",
+    body: "Describe your farm and get 30 crops ranked against its 30-year climate, soil and water, with the reasons for each score.",
+    data: "NASA POWER · FAO ECOCROP",
   },
   {
     title: "Improvement Plan",
     href: "/improvement-plan",
     icon: ListChecks,
-    body: "A general season checklist (soil test, drainage walk, extension office) that remembers your progress.",
-    data: "General guidance",
+    body: "A month-by-month season plan for your farm and crop, with a reason on every task. Ticks and field notes save to your account.",
+    data: "Your farm profile · NASA POWER",
   },
   {
     title: "AI Assistant",
     href: "/assistant",
     icon: MessageCircle,
     body: "Plain-language explanations of crops, seasons and next steps. It says when information is missing.",
-    data: "Gemini · demo context",
+    data: "Gemini · your farm profile",
   },
 ]
 
@@ -348,8 +348,8 @@ export function LandingPage() {
                 Five tools, one workspace.
               </h2>
               <p className="mt-5 max-w-[46ch] text-[17px] leading-[1.6] text-ink-soft">
-                Two answer from live public climate records. The others help you describe your farm,
-                plan the season and ask questions, and they say plainly when they use sample data.
+                Four answer from public climate records for your exact location. The assistant explains
+                them in plain language, using your farm profile as context.
               </p>
               <div className="relative mt-8 aspect-[4/3] overflow-hidden rounded-[16px]">
                 <Image
@@ -395,8 +395,8 @@ export function LandingPage() {
                 Every number has a source.
               </h2>
               <p className="mt-5 text-[17px] leading-[1.6] text-ink-soft">
-                Results name the dataset they came from. Missing values stay marked as unavailable, and
-                sample values are labelled where they appear.
+                Results name the dataset they came from, and missing values stay marked as unavailable
+                rather than filled in.
               </p>
             </div>
             <dl className="mt-12 grid gap-px overflow-hidden rounded-[16px] border border-line bg-line sm:grid-cols-2">

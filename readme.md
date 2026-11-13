@@ -15,10 +15,10 @@ Every number shown is either sourced real data or clearly labelled as a sample. 
 |---|---|---|
 | Crop Finder and Crop Results | Ranks 30 crops for the farm. Shows the top crop's season, expected harvest, and how it fits on warmth, water and soil, plus the full ranked table and the land's climate. | NASA POWER 30-year climatology, FAO ECOCROP, `crops.json` |
 | Season Comparison | Compares a past season (or a 3- or 5-year average) with the Open-Meteo seasonal outlook over the farmer's growing window. Shows climate risks, a verdict for each crop (Continue, Monitor, Reconsider) and next steps. | NASA POWER monthly and daily, Open-Meteo seasonal (ECMWF SEAS5), FAO ECOCROP |
-| Planting & Weather | Finds the months whose mean temperature is inside a crop's ECOCROP optimum, and the longest unbroken window. | NASA POWER (30-year normal by default, or the last 1, 3 or 5 years), FAO ECOCROP |
+| Planting & Weather | Finds the months whose mean temperature is inside a crop's ECOCROP optimum, and the longest unbroken window. Charts how far each month sits from the optimum, plus rain during the window. | NASA POWER (30-year normal by default, or the last 1, 3 or 5 years), FAO ECOCROP |
 | Improvement Plan | Builds a season plan on the server from the saved profile: soil, water, variety and timing tasks with due months, plus field notes. | Farm profile, NASA POWER 30-year climatology, crop scorer |
 | AI Assistant | Answers farming questions in plain language using the farmer's profile as context. | Google Gemini (server-side) |
-| Overview | Location search with a map, links into each tool, the next tasks from the season plan, and clearly labelled sample conditions. | OpenStreetMap Nominatim, season plan |
+| Overview | Location search with a satellite map, live conditions, the 30-year climate normal, active weather alerts (US only), and the next tasks from the season plan. | OpenStreetMap Nominatim, Open-Meteo forecast, US National Weather Service, NASA POWER, season plan |
 | Farm Profile, sign-up and sign-in | Farmer accounts and the saved farm details every tool starts from. | SQLite, OpenStreetMap Nominatim (location picker, called from the browser) |
 
 ## How the scoring works
@@ -35,11 +35,14 @@ ClimateCrop AI is rule-based and transparent. There is no trained machine-learni
 - [NASA POWER](https://power.larc.nasa.gov/): 30-year monthly climatology, plus monthly and daily observations.
 - [Open-Meteo Seasonal Forecast API](https://open-meteo.com/en/docs/seasonal-forecast-api): ECMWF SEAS5 ensemble-mean outlook.
 - [FAO ECOCROP](https://github.com/OpenCLIM/ecocrop): crop temperature, rainfall and pH ranges for 2,568 species. Downloaded once and saved to `clim_backend/data/ecocrop.csv`.
-- [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/): place search. Maps use OpenStreetMap tiles.
+- [Open-Meteo Forecast API](https://open-meteo.com/en/docs): current temperature, conditions and the last 24 hours of rain.
+- [US National Weather Service](https://www.weather.gov/documentation/services-web-api): active weather alerts for US locations.
+- [OpenStreetMap Nominatim](https://nominatim.openstreetmap.org/): place search.
+- [Esri World Imagery](https://www.arcgis.com/home/item.html?id=10df2279f9684e4a9f6a7f08febac2a9): satellite maps, with OpenStreetMap as the street layer.
 
 ## Technologies
 
-- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts, Leaflet, Vercel AI SDK (Gemini for the assistant), OpenUI (AI-generated planting briefs).
+- **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts, Leaflet, Vercel AI SDK (Gemini for the assistant).
 - **Backend:** Python, Flask 3, flask-cors, SQLite. The standard library does the rest; there is no pandas or scikit-learn.
 - **Design:** the "Seed Packet" system, documented in [`DESIGN.md`](DESIGN.md), with product notes in [`PRODUCT.md`](PRODUCT.md).
 
@@ -60,11 +63,12 @@ climAi/
 │   │   ├── crops.py              FAO ECOCROP catalog, search and ranges
 │   │   ├── season.py             Season comparison, geocoding, NASA and Open-Meteo
 │   │   ├── planting.py           Planting window
+│   │   ├── weather.py            Overview: live conditions, NWS alerts, climate normal
 │   │   └── season_plan.py        Season plan tasks
 │   ├── data/ecocrop.csv          Cached ECOCROP database
-│   └── test_app.py, test_accounts.py, test_plan.py
+│   └── test_app.py, test_accounts.py, test_plan.py, test_weather.py
 ├── clim_frontend/                Next.js app (port 3000)
-│   ├── app/                      Pages and the assistant and brief API routes
+│   ├── app/                      Pages and the assistant API route
 │   ├── components/               Page components and the shared UI kit
 │   └── lib/                      API client, response parsers, helpers
 ├── docs/                         Page guide and feature plans
@@ -113,11 +117,10 @@ The app runs at `http://localhost:3000`.
 | Variable | Used for |
 |---|---|
 | `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` | Crop Finder posts here, normally `http://127.0.0.1:5001/api/crop-analysis` |
-| `NEXT_PUBLIC_API_BASE_URL` | Optional base for the search, season and planting routes (default `http://127.0.0.1:5001`) |
+| `NEXT_PUBLIC_API_BASE_URL` | Optional base for the search, season, planting and weather routes (default `http://127.0.0.1:5001`) |
 | `BACKEND_URL` | Server-side target of the `/backend/*` proxy for account, plan and notes routes (default `http://127.0.0.1:5001`) |
 | `GOOGLE_GENERATIVE_AI_API_KEY` | AI Assistant (Gemini). Server-side only |
 | `GEMINI_MODEL` | Optional assistant model override |
-| `THESYS_API_KEY` | Optional AI-generated planting brief (OpenUI). Server-side only |
 
 Restart the frontend after changing environment variables.
 
@@ -143,6 +146,7 @@ All errors come back as `{"error": "..."}` with plain, user-safe messages. Techn
 | GET | `/api/crops/search?q=&limit=` | Search the FAO ECOCROP catalog |
 | POST | `/api/season/compare` | Season comparison |
 | POST | `/api/planting/plan` | Planting window. `baselineSpan` is `30` (30-year normal) or `1`, `3`, `5` years |
+| GET | `/api/weather/overview?lat=&lon=` | Overview: `current`, `alerts` and `normal`, each `{data}` or `{error}` so one failure doesn't hide the rest. `alerts.data` is `null` outside the US |
 
 A new browser-called route must be added to the CORS list in `app.py`.
 

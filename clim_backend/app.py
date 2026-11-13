@@ -9,7 +9,7 @@ from flask_cors import CORS
 import accounts
 import plan
 from crop_suitability import recommend_crops
-from services import planting, season
+from services import planting, season, weather
 from services.climate import CLIMATOLOGY_LABEL, MONTH_KEYS, ClimateUnavailable, fetch_monthly_climate  # noqa: F401
 from services.crops import catalog_source, search_crops
 from db import close_db
@@ -42,6 +42,7 @@ CORS(app, resources={
     r"/api/crops/search": {},
     r"/api/season/compare": {},
     r"/api/planting/plan": {},
+    r"/api/weather/overview": {},
 })
 app.register_blueprint(accounts.bp)
 app.register_blueprint(plan.bp)
@@ -136,6 +137,19 @@ def location_search():
         app.logger.exception("Location search failed for %r", query)
         return jsonify({"error": "Location search is unavailable right now. Please try again."}), 502
     return jsonify({"results": results}), 200
+
+
+@app.route("/api/weather/overview", methods=["GET"])
+def weather_overview():
+    """Current conditions, active alerts and the climate normal for the Overview page."""
+    try:
+        lat = float(request.args.get("lat", ""))
+        lon = float(request.args.get("lon", ""))
+    except ValueError:
+        return jsonify({"error": "lat and lon must be numbers."}), 400
+    if not (in_range(lat, -90, 90) and in_range(lon, -180, 180)):
+        return jsonify({"error": "lat and lon are out of range."}), 400
+    return jsonify(weather.overview(lat, lon, logger=app.logger)), 200
 
 
 @app.route("/api/crops/search", methods=["GET"])

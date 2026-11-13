@@ -1,7 +1,7 @@
 "use client"
 
 import { createContext, useContext, useEffect, useMemo, useState } from "react"
-import { type LocationName } from "@/lib/demo-data"
+type LocationName = string
 
 export type FarmerObservation = {
   id: string
@@ -14,7 +14,7 @@ export type FarmerObservation = {
 
 export type Coordinates = { lat: number; lon: number }
 
-type SavedDemoData = {
+type SavedWorkspace = {
   location: LocationName
   /** Present when the location came from a geocoded search result. */
   coordinates: Coordinates | null
@@ -22,7 +22,7 @@ type SavedDemoData = {
   observations: FarmerObservation[]
 }
 
-type AppDataContextValue = SavedDemoData & {
+type AppDataContextValue = SavedWorkspace & {
   setLocation: (location: LocationName, coordinates?: Coordinates | null) => void
   toggleAction: (actionId: string) => void
   addObservation: (observation: Omit<FarmerObservation, "id" | "createdAt">) => void
@@ -44,7 +44,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
       const currentData = window.localStorage.getItem(storageKey)
       const saved = currentData ?? window.localStorage.getItem(legacyStorageKey)
       if (saved) {
-        const parsed = JSON.parse(saved) as Partial<SavedDemoData>
+        const parsed = JSON.parse(saved) as Partial<SavedWorkspace>
         if (currentData && typeof parsed.location === "string") setLocationName(parsed.location.trim())
         if (currentData && isCoordinates(parsed.coordinates)) setCoordinates(parsed.coordinates)
         if (Array.isArray(parsed.completedActionIds)) {
@@ -67,7 +67,7 @@ export function AppDataProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!isHydrated) return
-    const saved: SavedDemoData = { location, coordinates, completedActionIds, observations }
+    const saved: SavedWorkspace = { location, coordinates, completedActionIds, observations }
     try {
       window.localStorage.setItem(storageKey, JSON.stringify(saved))
     } catch {

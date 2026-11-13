@@ -1,5 +1,6 @@
 "use client";
 
+import type { ReactNode } from "react";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -13,12 +14,17 @@ import {
   type LucideIcon,
 } from "lucide-react";
 import { PageIntro } from "@/components/shared/page-intro";
-import { seasonalSummary } from "@/lib/demo-data";
 import { useSeasonPlan } from "@/components/plans/use-season-plan";
-import { demoClimateService } from "@/lib/climate-service";
 import { useAppData } from "@/components/providers/app-data-provider";
+import { useAuth } from "@/components/providers/auth-provider";
 import { LocationSearch } from "@/components/shared/location-search";
-import { Panel, PanelHead, Pill, Spec, SpecGrid } from "@/components/shared/ui-kit";
+import { Panel, PanelHead, Pill, Skeleton, Spec, SpecGrid, SourceNote } from "@/components/shared/ui-kit";
+import {
+  useWeatherOverview,
+  type Part,
+  type WeatherAlert,
+  type WeatherOverview,
+} from "@/components/dashboard/use-weather-overview";
 import { cn } from "@/lib/utils";
 
 const tools: Array<{ title: string; href: string; icon: LucideIcon; body: string; source: string }> = [
@@ -40,15 +46,20 @@ const tools: Array<{ title: string; href: string; icon: LucideIcon; body: string
     title: "Crop Finder",
     href: "/crop-finder",
     icon: Sprout,
-    body: "Describe your farm, fields and goals for a crop assessment.",
-    source: "Your farm details",
+    body: "Describe your farm and see which crops fit its climate, soil and water.",
+    source: "NASA POWER · ECOCROP",
   },
 ];
 
 export function OverviewDashboard() {
-  const { location } = useAppData();
-  const snapshot = demoClimateService.getDashboardSnapshot(location);
-  const locationLabel = location ? location.split(",")[0] : "Not set";
+  const { location, coordinates } = useAppData();
+  const { state: auth } = useAuth();
+  const profile = auth.status === "signed-in" ? auth.account.profile : null;
+  // The location picked here wins; otherwise fall back to the farm on the profile.
+  const point = coordinates ?? profile?.coordinates ?? null;
+  const placeName = coordinates ? location : profile?.location ?? location;
+  const weather = useWeatherOverview(point);
+  const locationLabel = placeName ? placeName.split(",")[0] : "Not set";
 
   return (
     <div className="flex flex-col gap-6">
@@ -95,95 +106,220 @@ export function OverviewDashboard() {
         </Panel>
       </div>
 
-      <Panel className="p-5 sm:p-6" aria-labelledby="conditions-heading">
-        <PanelHead
-          id="conditions-heading"
-          icon={ThermometerSun}
-          title="Sample conditions"
-          description="Illustrative values that show how this panel will read once a live weather feed is connected. They are not observations for your location."
-          action={<Pill tone="warn">Demo data</Pill>}
-        />
-        <SpecGrid className="mt-5">
-          <Spec label="Temperature" icon={ThermometerSun} tone="clay" value={`${snapshot.temperatureF}°F`} note="Sample" />
-          <Spec
-            label="Recent rainfall"
-            icon={CloudRain}
-            tone="sow"
-            value={`${snapshot.recentRainfallInches.toFixed(2)} in`}
-            note="Past 24 hours · sample"
-          />
-          <Spec label="Conditions" icon={CloudSun} value={snapshot.conditions} note="Sample" />
-          <Spec
-            label="Location"
-            icon={MapPin}
-            tone="forest"
-            value={locationLabel}
-            note={location ? "Workspace location" : "Search above to set it"}
-          />
-        </SpecGrid>
-      </Panel>
+      <CurrentPanel weather={weather} locationLabel={locationLabel} hasPoint={point !== null} />
 
       <div className="grid gap-6 xl:grid-cols-2">
-        <Panel className="p-5 sm:p-6" aria-labelledby="season-summary-heading">
-          <PanelHead
-            id="season-summary-heading"
-            title="A season to plan for"
-            description="Demonstration seasonal patterns, a starting point and not a forecast for your farm."
-            action={<Pill tone="warn">Demo data</Pill>}
-          />
-          <dl className="mt-4 divide-y divide-line-soft">
-            <SummaryRow
-              label="Rainfall pattern"
-              value="Near seasonal range"
-              detail={`Illustrative ${seasonalSummary.currentYear} total: ${snapshot.seasonalRainfallInches.toFixed(1)} in`}
-            />
-            <SummaryRow
-              label="Average temperature"
-              value={`${Math.round(snapshot.seasonalAverageTemperatureF)}°F`}
-              detail="Demonstration seasonal average"
-            />
-            <SummaryRow
-              label="Notable periods"
-              value={`${snapshot.wetPeriods} wet · ${snapshot.dryPeriods} dry`}
-              detail="Sample comparison periods"
-            />
-          </dl>
-          <Link
-            href="/season-comparison"
-            className="mt-5 inline-flex items-center gap-1.5 text-[14px] font-semibold text-forest hover:underline"
-          >
-            Compare real seasons for your location <ArrowRight size={15} aria-hidden="true" />
-          </Link>
-        </Panel>
+        <NormalPanel weather={weather} />
 
         <NextTasks />
       </div>
 
-      <section
-        aria-label="Weather alerts"
-        className="flex flex-col gap-3 rounded-[14px] border border-dashed border-[#c8cfc0] bg-paper p-5 sm:flex-row sm:items-center sm:justify-between sm:p-6"
+      <AlertsSection weather={weather} />
+    </div>
+  );
+}
+
+function CurrentPanel({
+  weather,
+  locationLabel,
+  hasPoint,
+}: {
+  weather: WeatherOverview | null;
+  locationLabel: string;
+  hasPoint: boolean;
+}) {
+  const part = weather?.current;
+  const data = part?.status === "ready" ? part.data : null;
+  const pending = part?.status === "loading";
+  const empty = pending ? "…" : "—";
+
+  return (
+    <Panel className="p-5 sm:p-6" aria-labelledby="conditions-heading">
+      <PanelHead
+        id="conditions-heading"
+        icon={ThermometerSun}
+        title="Conditions right now"
+        description={
+          !hasPoint
+            ? "Search for your location above to see live conditions."
+            : part?.status === "error"
+              ? part.message
+              : "Live readings for your location, refreshed every 10 minutes."
+        }
+        action={data ? <Pill tone="good">Live</Pill> : undefined}
+      />
+      <SpecGrid className="mt-5">
+        <Spec
+          label="Temperature"
+          icon={ThermometerSun}
+          tone="clay"
+          value={data ? `${data.temperatureF}°F` : empty}
+          note={data ? `${data.temperatureC}°C` : "Open-Meteo"}
+        />
+        <Spec
+          label="Recent rainfall"
+          icon={CloudRain}
+          tone="sow"
+          value={data ? `${data.rainPast24hIn.toFixed(2)} in` : empty}
+          note="Past 24 hours"
+        />
+        <Spec
+          label="Conditions"
+          icon={CloudSun}
+          value={data ? data.conditions : empty}
+          note={data?.observedAt ? `As of ${formatLocalTime(data.observedAt)}${data.timezone ? ` ${data.timezone}` : ""}` : "Open-Meteo"}
+        />
+        <Spec
+          label="Location"
+          icon={MapPin}
+          tone="forest"
+          value={locationLabel}
+          note={hasPoint ? "Workspace location" : "Search above to set it"}
+        />
+      </SpecGrid>
+      {data && <SourceNote className="mt-4">Source: {data.source}.</SourceNote>}
+    </Panel>
+  );
+}
+
+/** "2026-11-12T22:00" (already local to the farm) → "10:00 PM". */
+function formatLocalTime(iso: string) {
+  const match = /T(\d{2}):(\d{2})/.exec(iso);
+  if (!match) return iso;
+  const hour = Number(match[1]);
+  return `${hour % 12 || 12}:${match[2]} ${hour < 12 ? "AM" : "PM"}`;
+}
+
+function NormalPanel({ weather }: { weather: WeatherOverview | null }) {
+  const part = weather?.normal;
+  return (
+    <Panel className="p-5 sm:p-6" aria-labelledby="season-summary-heading">
+      <PanelHead
+        id="season-summary-heading"
+        title="Your climate normal"
+        description="What a typical year looks like here, averaged over 30 years."
+      />
+      <PartBody part={part} rows={3} idle="Set a location to see its 30-year normal.">
+        {(normal) => (
+          <>
+            <dl className="mt-4 divide-y divide-line-soft">
+              <SummaryRow
+                label="Annual rainfall"
+                value={`${normal.annualRainIn} in`}
+                detail={`Wettest ${normal.wettestMonth.month} (${normal.wettestMonth.rainIn} in) · driest ${normal.driestMonth.month} (${normal.driestMonth.rainIn} in)`}
+              />
+              <SummaryRow
+                label="Average temperature"
+                value={`${normal.meanTempF}°F`}
+                detail={`Warmest ${normal.warmestMonth.month} (${normal.warmestMonth.tempF}°F) · coolest ${normal.coolestMonth.month} (${normal.coolestMonth.tempF}°F)`}
+              />
+            </dl>
+            <SourceNote className="mt-4">Source: {normal.source}.</SourceNote>
+          </>
+        )}
+      </PartBody>
+      <Link
+        href="/season-comparison"
+        className="mt-5 inline-flex items-center gap-1.5 text-[14px] font-semibold text-forest hover:underline"
       >
+        Compare a real season against it <ArrowRight size={15} aria-hidden="true" />
+      </Link>
+    </Panel>
+  );
+}
+
+function PartBody<T>({
+  part,
+  rows,
+  idle,
+  children,
+}: {
+  part: Part<T> | undefined;
+  rows: number;
+  idle: string;
+  children: (data: T) => ReactNode;
+}) {
+  if (!part) return <p className="mt-4 text-[14px] text-ink-mute">{idle}</p>;
+  if (part.status === "loading")
+    return (
+      <div className="mt-4 space-y-3" aria-hidden="true">
+        {Array.from({ length: rows }, (_, index) => (
+          <Skeleton key={index} className="h-10" />
+        ))}
+      </div>
+    );
+  if (part.status === "error") return <p className="mt-4 text-[14px] text-clay">{part.message}</p>;
+  return <>{children(part.data)}</>;
+}
+
+const SEVERITY_TONE: Record<string, "bad" | "warn" | "info" | "neutral"> = {
+  Extreme: "bad",
+  Severe: "bad",
+  Moderate: "warn",
+  Minor: "info",
+};
+
+function AlertsSection({ weather }: { weather: WeatherOverview | null }) {
+  const part = weather?.alerts;
+  const alerts: WeatherAlert[] | null = part?.status === "ready" ? part.data : null;
+  const hasAlerts = alerts !== null && alerts.length > 0;
+
+  let message = "Set a location to check for active weather alerts.";
+  if (part?.status === "loading") message = "Checking the National Weather Service…";
+  else if (part?.status === "error") message = part.message;
+  else if (part?.status === "ready" && alerts === null)
+    message = "Alerts come from the US National Weather Service, so they are only available for US locations.";
+  else if (part?.status === "ready" && alerts?.length === 0)
+    message = "No active alerts from the National Weather Service for this location.";
+
+  return (
+    <section
+      aria-label="Weather alerts"
+      className={cn(
+        "flex flex-col gap-3 rounded-[14px] p-5 sm:p-6",
+        hasAlerts ? "border border-line bg-panel" : "border border-dashed border-[#c8cfc0] bg-paper",
+      )}
+    >
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-start gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-sow-tint text-sow">
+          <span
+            className={cn(
+              "flex size-9 shrink-0 items-center justify-center rounded-full",
+              hasAlerts ? "bg-clay-tint text-clay" : "bg-sow-tint text-sow",
+            )}
+          >
             <CloudSun size={17} aria-hidden="true" />
           </span>
           <div>
-            <h2 className="font-heading text-[15.5px] font-bold text-ink">Weather alerts</h2>
+            <h2 className="font-heading text-[15.5px] font-bold text-ink">
+              {hasAlerts ? `${alerts.length} active weather alert${alerts.length === 1 ? "" : "s"}` : "Weather alerts"}
+            </h2>
             <p className="mt-1 text-[14px] leading-[1.55] text-ink-mute">
-              No alerts are shown because a live weather alert source is not connected.
+              {hasAlerts ? "From the US National Weather Service." : message}
             </p>
           </div>
         </div>
         <Link
           href="/planting-weather"
-          className={cn(
-            "inline-flex shrink-0 items-center gap-1.5 text-[14px] font-semibold text-forest hover:underline",
-          )}
+          className="inline-flex shrink-0 items-center gap-1.5 text-[14px] font-semibold text-forest hover:underline"
         >
           Planting & weather <ArrowRight size={15} aria-hidden="true" />
         </Link>
-      </section>
-    </div>
+      </div>
+      {hasAlerts && (
+        <ul className="divide-y divide-line-soft border-t border-line-soft">
+          {alerts.map((alert) => (
+            <li key={alert.id} className="py-3 last:pb-0">
+              <div className="flex flex-wrap items-center gap-2">
+                <p className="text-[14.5px] font-semibold text-ink">{alert.event}</p>
+                <Pill tone={SEVERITY_TONE[alert.severity] ?? "neutral"}>{alert.severity}</Pill>
+              </div>
+              {alert.headline && <p className="mt-1 text-[13.5px] leading-[1.5] text-ink-soft">{alert.headline}</p>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </section>
   );
 }
 

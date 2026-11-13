@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import { CalendarDays, CloudRain, CloudSun, Info, MapPin, ThermometerSun, X } from "lucide-react";
 import { PageIntro } from "@/components/shared/page-intro";
-import { PlantingBrief } from "@/components/weather/planting-brief";
+import { PlantingFit } from "@/components/weather/planting-fit";
 import { useAppData } from "@/components/providers/app-data-provider";
 import { LocationMap } from "@/components/shared/location-map";
 import { SearchField } from "@/components/shared/search-field";
@@ -556,13 +556,15 @@ export function PlantingWeather() {
                 </div>
               </Panel>
 
+              <PlantingFit plan={result} />
+
               <section className="grid gap-6 2xl:grid-cols-2" aria-label="Climate normals">
                 <Panel className="p-5 sm:p-6" aria-labelledby="plan-temp-heading">
                   <PanelHead
                     id="plan-temp-heading"
                     icon={ThermometerSun}
                     title="Monthly mean temperature"
-                    description={`${result.baseline.label} normals against the ECOCROP optimum (${result.crop.tempOptimal}).`}
+                    description={`Monthly means (${result.baseline.label}) against the ECOCROP optimum (${result.crop.tempOptimal}).`}
                   />
                   <ChartLegend
                     className="mt-4"
@@ -611,7 +613,7 @@ export function PlantingWeather() {
                     id="plan-rain-heading"
                     icon={CloudRain}
                     title="Monthly rainfall"
-                    description={`Monthly totals from the same ${result.baseline.label} normals.`}
+                    description={`Monthly totals from the same baseline (${result.baseline.label}).`}
                   />
                   <ChartLegend
                     className="mt-4"
@@ -718,10 +720,7 @@ export function PlantingWeather() {
                 </div>
               </Panel>
 
-              <PlantingBrief
-                key={`${result.location.label}-${result.crop.scientificName}-${result.units}-${result.baseline.label}`}
-                context={result}
-              />
+
 
               <Panel tone="quiet" className="border border-line p-5 sm:p-6" aria-labelledby="derived-heading">
                 <PanelHead id="derived-heading" icon={Info} title="How this window was derived" />
