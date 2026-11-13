@@ -13,6 +13,7 @@ import {
   Menu,
   MessageCircle,
   Route,
+  ScanLine,
   Sprout,
   UserRound,
   Wheat,
@@ -48,6 +49,7 @@ const navigation: Array<{ label: string | null; items: NavItem[] }> = [
     label: "Act",
     items: [
       { title: "Crop Journeys", href: "/journeys", icon: Route },
+      { title: "Plant Health", href: "/plant-health", icon: ScanLine },
       { title: "Improvement Plan", href: "/improvement-plan", icon: ListChecks },
       { title: "AI Assistant", href: "/assistant", icon: MessageCircle },
     ],
@@ -65,6 +67,7 @@ const pageTitles: Record<string, string> = {
   "/season-comparison": "Season Comparison",
   "/improvement-plan": "Improvement Plan",
   "/journeys": "Crop Journeys",
+  "/plant-health": "Plant Health",
   "/planting-weather": "Planting & Weather",
   "/assistant": "AI Assistant",
   "/profile": "Farm Profile",

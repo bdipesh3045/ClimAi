@@ -7,14 +7,12 @@ import {
   readJourneyContext,
 } from "@/lib/assistant";
 import { createAssistantResponse } from "@/lib/assistant-stream";
-import { parseAccount, type Account } from "@/lib/session";
+import { fetchAccount } from "@/lib/server-account";
 
 export const maxDuration = 60;
 
 // Use the low-latency model for short farm questions; override server-side if needed.
 const MODEL_ID = process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash-lite";
-const BACKEND_URL = process.env.BACKEND_URL ?? "http://127.0.0.1:5001";
-const ACCOUNT_TIMEOUT_MS = 5_000;
 const MAX_MESSAGES = 12;
 const MAX_MESSAGE_CHARACTERS = 4000;
 const MAX_CONVERSATION_CHARACTERS = 16000;
@@ -31,35 +29,8 @@ interface TextOnlyMessage {
   parts: Array<{ type: "text"; text: string }>;
 }
 
-type AccountResult =
-  | { kind: "signed-in"; account: Account }
-  | { kind: "guest" }
-  | { kind: "unavailable" };
-
 function errorResponse(message: string, status: number): Response {
   return Response.json({ error: message }, { status });
-}
-
-/** Ask Flask who sent this request, by passing the browser's session cookie along. */
-async function fetchAccount(request: Request): Promise<AccountResult> {
-  const cookie = request.headers.get("cookie");
-  if (!cookie) return { kind: "guest" };
-  try {
-    const response = await fetch(`${BACKEND_URL}/api/auth/me`, {
-      headers: { cookie },
-      cache: "no-store",
-      signal: AbortSignal.timeout(ACCOUNT_TIMEOUT_MS),
-    });
-    if (response.status === 401) return { kind: "guest" };
-    if (!response.ok) {
-      console.error(`[assistant] /api/auth/me returned ${response.status}`);
-      return { kind: "unavailable" };
-    }
-    return { kind: "signed-in", account: parseAccount(await response.json()) };
-  } catch (error) {
-    console.error("[assistant] could not load the signed-in account", error);
-    return { kind: "unavailable" };
-  }
 }
 
 /**
@@ -147,7 +118,7 @@ function readMessages(
 }
 
 export async function POST(request: Request) {
-  const result = await fetchAccount(request);
+  const result = await fetchAccount(request, "assistant");
   if (result.kind === "guest")
     return errorResponse("Sign in to use the assistant.", 401);
   if (result.kind === "unavailable")

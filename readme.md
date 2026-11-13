@@ -18,6 +18,7 @@ Every number shown is either sourced real data or clearly labelled as a sample. 
 | Planting & Weather | Finds the months whose mean temperature is inside a crop's ECOCROP optimum, and the longest unbroken window. Charts how far each month sits from the optimum, plus rain during the window. | NASA POWER (30-year normal by default, or the last 1, 3 or 5 years), FAO ECOCROP |
 | Improvement Plan | Builds a season plan on the server from the saved profile: soil, water, variety and timing tasks with due months, plus field notes. | Farm profile, NASA POWER 30-year climatology, crop scorer |
 | Crop Journeys | Follows one crop (any of the 30) from sowing to harvest: a timeline of everything done to it, its stage and progress, and a **crop expert**. The expert gives field alerts from rules on the real forecast (frost, heat, heavy rain, dry spell, overdue steps), plus a stage-by-stage playbook and a reaction to each entry written by Gemini from this field's real data. Each journey shows an **expected harvest** from the Crop Finder scorer for that crop on that field. Journeys, entries and ticked steps are saved per account. The plant-health check still runs on labelled mock data until its image model is connected. | SQLite (`journeys.py`), Gemini (`services/expert.py`), Open-Meteo, NASA POWER, FAO ECOCROP; mock data (`clim_frontend/lib/journeys-mock.ts`) |
+| Plant Health (`/plant-health`) | Upload a leaf photo, pick the crop and optionally share a location. Pl@ntNet identifies the plant and disease (top 3); below a 0.3 disease score Gemini looks at the photo instead. Gemini then writes a checklist of actions for the week, tied to the last 7 days and next 3 days of weather. Every result shows its probability. Runs in `clim_frontend/app/api/plant-check/route.ts` (signed-in, 10 checks per 10 minutes). | Pl@ntNet identify and diseases APIs, Google Gemini, Open-Meteo forecast |
 | AI Assistant | Answers farming questions in plain language using the farmer's profile as context. It also opens as a side panel on each crop journey, where it knows that crop's stage, timeline, expert steps and field alerts. | Google Gemini (server-side) |
 | Overview | Location search with a satellite map, live conditions, the 30-year climate normal, active weather alerts (US only), and the next tasks from the season plan. | OpenStreetMap Nominatim, Open-Meteo forecast, US National Weather Service, NASA POWER, season plan |
 | Farm Profile, sign-up and sign-in | Farmer accounts and the saved farm details every tool starts from. | SQLite, OpenStreetMap Nominatim (location picker, called from the browser) |
@@ -128,8 +129,9 @@ The app runs at `http://localhost:3000`.
 | `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` | Crop Finder posts here, normally `http://127.0.0.1:5001/api/crop-analysis` |
 | `NEXT_PUBLIC_API_BASE_URL` | Optional base for the search, season, planting and weather routes (default `http://127.0.0.1:5001`) |
 | `BACKEND_URL` | Server-side target of the `/backend/*` proxy for account, plan and notes routes (default `http://127.0.0.1:5001`) |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | AI Assistant (Gemini). Server-side only |
-| `GEMINI_MODEL` | Optional assistant model override |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | AI Assistant and the plant health check's AI fallback and advice (Gemini). Server-side only |
+| `PLANTNET_API_KEY` | Plant health check (Pl@ntNet plant and disease ID). Server-side only. The key's IP allowlist must include the server |
+| `GEMINI_MODEL` | Optional model override for the assistant and plant health check |
 
 Restart the frontend after changing environment variables.
 
@@ -177,7 +179,8 @@ git push ──> GitHub Actions (tests + build)
 | `BACKEND_URL` | `<api>` |
 | `NEXT_PUBLIC_API_BASE_URL` | `<api>` |
 | `NEXT_PUBLIC_CROP_ANALYSIS_API_URL` | `<api>/api/crop-analysis` |
-| `GOOGLE_GENERATIVE_AI_API_KEY` | Your Gemini key (only needed for the AI Assistant) |
+| `GOOGLE_GENERATIVE_AI_API_KEY` | Your Gemini key (needed for the AI Assistant and plant health check) |
+| `PLANTNET_API_KEY` | Your Pl@ntNet key (plant health check). Vercel's server IPs change, so turn off the key's IP allowlist or the check falls back to AI only |
 | `ENABLE_EXPERIMENTAL_COREPACK` | `1`, so Vercel uses the pnpm version pinned in `package.json` |
 
 4. Deploy. Every later push to `main` redeploys, and pull requests get their own preview links.
