@@ -1,4 +1,3 @@
-import json
 import os
 from datetime import timedelta
 from pathlib import Path
@@ -86,12 +85,6 @@ def crop_analysis():
     payload = request.get_json(silent=True)
     if not isinstance(payload, dict):
         return jsonify({"error": "Request body must be a JSON object."}), 400
-
-    print(
-        "Received crop analysis data:\n"
-        + json.dumps(payload, indent=2),  # escaped, so odd unicode cannot crash the print
-        flush=True,
-    )
 
     try:
         lat, lon, texture, irrigated, acres = parse_farm(payload)

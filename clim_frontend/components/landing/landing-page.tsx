@@ -10,6 +10,8 @@ import {
   MapPin,
   Menu,
   MessageCircle,
+  Route,
+  ScanLine,
   Search,
   Sprout,
   Wheat,
@@ -52,6 +54,20 @@ const example = {
 
 const tools: Array<{ title: string; href: string; icon: LucideIcon; body: string; data: string }> = [
   {
+    title: "Crop Journeys",
+    href: "/journeys",
+    icon: Route,
+    body: "Follow one crop from sowing to harvest. A crop expert says what to do at each stage and why, warns about frost, heat, rain or dry spells, and reacts to everything you log.",
+    data: "Open-Meteo forecast · NASA POWER · FAO ECOCROP · Gemini",
+  },
+  {
+    title: "Plant Health",
+    href: "/plant-health",
+    icon: ScanLine,
+    body: "Photograph a leaf to check it for disease, with a probability on every result and this week's actions tied to the weather.",
+    data: "Pl@ntNet · Gemini · Open-Meteo",
+  },
+  {
     title: "Season Comparison",
     href: "/season-comparison",
     icon: Wheat,
@@ -83,7 +99,7 @@ const tools: Array<{ title: string; href: string; icon: LucideIcon; body: string
     title: "AI Assistant",
     href: "/assistant",
     icon: MessageCircle,
-    body: "Plain-language explanations of crops, seasons and next steps. It says when information is missing.",
+    body: "Plain-language answers about crops, seasons and next steps, from your farm profile, or from a crop journey when you ask from one.",
     data: "Gemini · your farm profile",
   },
 ]
@@ -94,12 +110,20 @@ const sources = [
     role: "Observed daily and monthly temperature and rainfall for any point, used for past seasons and climate normals.",
   },
   {
-    name: "Open-Meteo Seasonal",
-    role: "The ECMWF SEAS5 seasonal outlook for the months ahead, always labelled as an outlook, never a forecast.",
+    name: "Open-Meteo",
+    role: "Current conditions and the 7-day forecast behind field alerts, plus the ECMWF SEAS5 seasonal outlook, always labelled as an outlook.",
   },
   {
     name: "FAO ECOCROP",
     role: "Optimal temperature and annual rainfall ranges for thousands of crop species.",
+  },
+  {
+    name: "Pl@ntNet",
+    role: "Plant and disease identification from a leaf photo, each result with its probability.",
+  },
+  {
+    name: "Google Gemini",
+    role: "Writes the crop expert's advice and the assistant's answers from the facts above. Its answers are checked and labelled as AI.",
   },
   {
     name: "OpenStreetMap",
@@ -251,8 +275,8 @@ export function LandingPage() {
               className="mt-6 max-w-[54ch] animate-rise text-[18px] leading-[1.6] text-white/85"
               style={{ animationDelay: "120ms" }}
             >
-              Pick a place and a crop. ClimateCrop AI compares past seasons with the coming outlook,
-              finds the months a crop fits, and explains the answer in plain language.
+              Pick a place and a crop. ClimateCrop AI finds the months it fits, follows it from sowing to
+              harvest with an expert at your side, and explains every answer in plain language.
             </p>
             <div className="mt-9 flex animate-rise flex-wrap gap-3" style={{ animationDelay: "220ms" }}>
               <Link href="/dashboard" className={buttonClass({ variant: "marigold", size: "lg" })}>
@@ -274,7 +298,7 @@ export function LandingPage() {
 
         <div className="border-t border-white/15 bg-forest-deep/40 backdrop-blur-sm">
           <p className="mx-auto max-w-[1240px] px-5 py-4 text-[14px] text-white/75 sm:px-8">
-            Built on NASA POWER, Open-Meteo seasonal forecasts, FAO ECOCROP and OpenStreetMap.
+            Built on NASA POWER, Open-Meteo, FAO ECOCROP, Pl@ntNet and OpenStreetMap.
           </p>
         </div>
       </header>
@@ -345,11 +369,11 @@ export function LandingPage() {
           <div className="mx-auto grid max-w-[1240px] gap-12 px-5 sm:px-8 lg:grid-cols-[minmax(0,0.8fr)_minmax(0,1.2fr)]">
             <div className="lg:sticky lg:top-10 lg:self-start">
               <h2 id="tools-heading" className="font-display text-[clamp(2rem,3.6vw,3rem)] leading-[1.06] text-balance">
-                Five tools, one workspace.
+                Seven tools, one workspace.
               </h2>
               <p className="mt-5 max-w-[46ch] text-[17px] leading-[1.6] text-ink-soft">
-                Four answer from public climate records for your exact location. The assistant explains
-                them in plain language, using your farm profile as context.
+                Each one starts from your exact location and public climate records. Crop Journeys ties
+                them together for one crop, from sowing to harvest.
               </p>
               <div className="relative mt-8 aspect-[4/3] overflow-hidden rounded-[16px]">
                 <Image
