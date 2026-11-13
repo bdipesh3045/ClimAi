@@ -16,10 +16,11 @@ export const metadata: Metadata = {
   description:
     'Compare seasons, find planting windows and check crop requirements for any location using NASA POWER, Open-Meteo seasonal forecasts and the FAO ECOCROP database.',
   applicationName: 'ClimateCrop AI',
+  // The ClimateCrop AI mark (marigold square, forest sprout), the same as the sidebar logo.
   icons: {
     icon: [
-      { url: '/icon-light-32x32.png', media: '(prefers-color-scheme: light)' },
       { url: '/icon.svg', type: 'image/svg+xml' },
+      { url: '/icon-32.png', type: 'image/png', sizes: '32x32' },
     ],
     apple: '/apple-icon.png',
   },
