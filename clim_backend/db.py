@@ -49,7 +49,9 @@ CREATE TABLE IF NOT EXISTS journeys (
     location    TEXT NOT NULL,
     sown_on     TEXT NOT NULL,
     season_days INTEGER NOT NULL,
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    lat         REAL,
+    lon         REAL
 );
 CREATE INDEX IF NOT EXISTS journeys_by_user ON journeys (user_id, id);
 CREATE TABLE IF NOT EXISTS journey_entries (
@@ -58,7 +60,8 @@ CREATE TABLE IF NOT EXISTS journey_entries (
     entry_date  TEXT NOT NULL,
     action      TEXT NOT NULL,
     details     TEXT NOT NULL,
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    expert_note TEXT
 );
 CREATE INDEX IF NOT EXISTS journey_entries_by_journey ON journey_entries (journey_id, id);
 CREATE TABLE IF NOT EXISTS journey_steps (
@@ -67,7 +70,31 @@ CREATE TABLE IF NOT EXISTS journey_steps (
     done_at     TEXT NOT NULL,
     PRIMARY KEY (journey_id, step_id)
 );
+CREATE TABLE IF NOT EXISTS journey_guides (
+    journey_id  INTEGER PRIMARY KEY REFERENCES journeys(id) ON DELETE CASCADE,
+    content     TEXT NOT NULL,   -- validated playbook JSON
+    source      TEXT NOT NULL CHECK (source IN ('ai', 'general')),
+    model       TEXT,
+    created_at  TEXT NOT NULL
+);
 """
+
+
+# Columns added after a table first shipped. CREATE TABLE IF NOT EXISTS never alters an
+# existing table, so older database files get them here.
+ADDED_COLUMNS = {
+    "journeys": {"lat": "REAL", "lon": "REAL"},
+    "journey_entries": {"expert_note": "TEXT"},
+}
+
+
+def _add_missing_columns(conn):
+    for table, columns in ADDED_COLUMNS.items():
+        existing = {row[1] for row in conn.execute(f"PRAGMA table_info({table})")}
+        for name, kind in columns.items():
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {name} {kind}")
+    conn.commit()
 
 
 def get_db():
@@ -78,6 +105,7 @@ def get_db():
         conn.row_factory = sqlite3.Row
         conn.execute("PRAGMA foreign_keys = ON")
         conn.executescript(SCHEMA)
+        _add_missing_columns(conn)
         g.db = conn
     return g.db
 

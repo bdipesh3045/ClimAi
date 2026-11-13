@@ -16,3 +16,6 @@ services:
       # Signs the sign-in cookie. Render generates a random value once and keeps it.
       - key: CLIMAI_SECRET_KEY
         generateValue: true
+      # Gemini key for the crop expert. Render asks for the value; it is never stored in git.
+      - key: GOOGLE_GENERATIVE_AI_API_KEY
+        sync: false

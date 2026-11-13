@@ -27,6 +27,8 @@ export type Journey = {
   /** ISO date, YYYY-MM-DD. */
   sownOn: string;
   seasonDays: number;
+  /** Field coordinates, used for the forecast and climate behind the crop expert. */
+  coordinates?: { lat: number; lon: number } | null;
   /** True for the built-in sample journeys, shown with a "Sample journey" label. */
   sample: boolean;
   entries: JourneyEntry[];

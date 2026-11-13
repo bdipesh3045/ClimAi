@@ -45,6 +45,26 @@ class JourneyTest(AccountsTestCase):
             with self.subTest(body=body):
                 self.assertEqual(self.create(**body).status_code, 400)
 
+    def test_coordinates_from_the_form_or_the_profile(self):
+        given = self.create(coordinates={"lat": 30.22, "lon": -92.02}).get_json()["journey"]
+        self.assertEqual(given["coordinates"], {"lat": 30.22, "lon": -92.02})
+        self.assertIsNone(self.create().get_json()["journey"]["coordinates"])  # no profile saved yet
+        self.save_profile()
+        from_profile = self.create().get_json()["journey"]["coordinates"]
+        self.assertIsNotNone(from_profile)
+        self.assertEqual(self.create(coordinates={"lat": 99, "lon": 0}).status_code, 400)
+
+    def test_older_databases_gain_the_new_columns(self):
+        import sqlite3
+        from db import _add_missing_columns
+        conn = sqlite3.connect(":memory:")
+        conn.execute("CREATE TABLE journeys (id INTEGER PRIMARY KEY, crop TEXT)")
+        conn.execute("CREATE TABLE journey_entries (id INTEGER PRIMARY KEY, details TEXT)")
+        _add_missing_columns(conn)
+        _add_missing_columns(conn)  # running twice is harmless
+        self.assertIn("lat", {r[1] for r in conn.execute("PRAGMA table_info(journeys)")})
+        self.assertIn("expert_note", {r[1] for r in conn.execute("PRAGMA table_info(journey_entries)")})
+
     def test_any_crop_from_the_catalogue(self):
         crops = self.client.get("/api/journeys/crops").get_json()["crops"]
         names = [c["name"] for c in crops]

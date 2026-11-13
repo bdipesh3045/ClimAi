@@ -6,6 +6,8 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, Plus, Route, Search, X } from "lucide-react";
 import { PageIntro } from "@/components/shared/page-intro";
 import { useAppData } from "@/components/providers/app-data-provider";
+import { useAuth } from "@/components/providers/auth-provider";
+import { SearchField } from "@/components/shared/search-field";
 import {
   Field,
   HelpText,
@@ -34,6 +36,19 @@ import {
   type Journey,
   type JourneyCrop,
 } from "@/lib/journeys";
+
+const API_BASE =
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ?? "http://127.0.0.1:5001";
+
+type Place = { label: string; lat: number; lon: number };
+
+/** "Baton Rouge, East Baton Rouge Parish, Louisiana, United States" -> "Baton Rouge, Louisiana". */
+function shortPlace(label: string) {
+  const parts = label.split(",").map((p) => p.trim()).filter(Boolean);
+  if (parts.length <= 2) return parts.join(", ");
+  const region = parts.length >= 3 ? parts[parts.length - 2] : parts[1];
+  return `${parts[0]}, ${region}`.slice(0, 120);
+}
 
 // Shown if the crop list can't load, so a journey can still be started.
 const FALLBACK_CROPS: CropOption[] = [
@@ -145,7 +160,15 @@ function JourneyCard({ journey }: { journey: Journey }) {
 
 function NewJourneyForm({ onClose }: { onClose: () => void }) {
   const { addJourney } = useJourneys();
-  const { location: savedLocation } = useAppData();
+  const { location: savedLocation, coordinates: savedCoordinates } = useAppData();
+  const { state: auth } = useAuth();
+  const profile = auth.status === "signed-in" ? auth.account.profile : null;
+  // Start from the profile farm, else the workspace location.
+  const startPlace: Place | null = profile
+    ? { label: profile.location, ...profile.coordinates }
+    : savedLocation && savedCoordinates
+      ? { label: savedLocation, ...savedCoordinates }
+      : null;
   const router = useRouter();
   const [crop, setCrop] = useState<JourneyCrop | null>("Soybeans");
   const [crops, setCrops] = useState<CropOption[]>(FALLBACK_CROPS);
@@ -174,20 +197,43 @@ function NewJourneyForm({ onClose }: { onClose: () => void }) {
     setError("");
   }
   const [sownOn, setSownOn] = useState(todayIso());
-  const [location, setLocation] = useState(savedLocation);
+  const [place, setPlace] = useState<Place | null>(startPlace);
+  const [placeQuery, setPlaceQuery] = useState(startPlace?.label ?? "");
+  const [placeResults, setPlaceResults] = useState<Place[]>([]);
+  const [placeState, setPlaceState] = useState<"idle" | "loading" | "empty" | "error" | "short">("idle");
+
+  async function searchPlaces() {
+    const q = placeQuery.trim();
+    if (q.length < 3) return setPlaceState("short");
+    setPlaceState("loading");
+    try {
+      const response = await fetch(`${API_BASE}/api/locations/search?q=${encodeURIComponent(q)}`);
+      const body = (await response.json()) as { results?: Place[] };
+      if (!response.ok) throw new Error();
+      setPlaceResults(body.results ?? []);
+      setPlaceState((body.results ?? []).length ? "idle" : "empty");
+    } catch {
+      setPlaceState("error");
+    }
+  }
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
     if (!crop) return setError("Search for a crop and pick it from the list.");
-    if (!location.trim()) return setError("Add where the crop is growing.");
+    if (!place) return setError("Search for where the crop is growing and pick a result.");
     if (!sownOn) return setError("Pick the sowing date.");
     if (sownOn > todayIso()) return setError("The sowing date can't be in the future.");
     setSaving(true);
     setError("");
     try {
-      const id = await addJourney({ crop: crop as JourneyCrop, sownOn, location: location.trim() });
+      const id = await addJourney({
+        crop: crop as JourneyCrop,
+        sownOn,
+        location: shortPlace(place.label),
+        coordinates: { lat: place.lat, lon: place.lon },
+      });
       router.push(`/journeys/${id}`);
     } catch (failure) {
       setError(errorText(failure, "The journey could not be saved. Please try again."));
@@ -271,14 +317,52 @@ function NewJourneyForm({ onClose }: { onClose: () => void }) {
             required
           />
         </Field>
-        <Field label="Location" htmlFor="journey-location">
-          <input
+        <Field label="Field location" htmlFor="journey-location">
+          <SearchField
             id="journey-location"
-            value={location}
-            onChange={(e) => setLocation(e.target.value)}
-            placeholder="e.g. Baton Rouge, Louisiana"
-            className={inputClass}
+            value={placeQuery}
+            onChange={(value) => {
+              setPlaceQuery(value);
+              setPlace(null);
+              setPlaceResults([]);
+              setPlaceState("idle");
+            }}
+            onSubmit={() => void searchPlaces()}
+            loading={placeState === "loading"}
+            placeholder="City, parish or address"
           />
+          {placeResults.length > 0 ? (
+            <ResultList label="Matching locations">
+              {placeResults.map((item) => (
+                <ResultItem
+                  key={`${item.lat}-${item.lon}-${item.label}`}
+                  onSelect={() => {
+                    setPlace(item);
+                    setPlaceQuery(item.label);
+                    setPlaceResults([]);
+                  }}
+                  primary={item.label}
+                />
+              ))}
+            </ResultList>
+          ) : place ? (
+            <HelpText tone="good">
+              Using {shortPlace(place.label)}{" "}
+              <span className="tabular text-ink-mute">
+                ({place.lat.toFixed(3)}, {place.lon.toFixed(3)})
+              </span>
+            </HelpText>
+          ) : (
+            <HelpText tone={placeState === "error" ? "error" : "mute"}>
+              {placeState === "empty"
+                ? "No matches. Try a nearby town or add the state."
+                : placeState === "short"
+                  ? "Enter at least 3 characters."
+                  : placeState === "error"
+                    ? "Location search failed. Check that the backend is running."
+                    : "Press Search, then pick a result. The expert uses this spot's weather."}
+            </HelpText>
+          )}
         </Field>
         <div className="flex gap-3 md:col-span-3">
           <button type="submit" disabled={saving} className={buttonClass()}>

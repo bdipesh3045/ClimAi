@@ -17,18 +17,23 @@ Every number shown is either sourced real data or clearly labelled as a sample. 
 | Season Comparison | Compares a past season (or a 3- or 5-year average) with the Open-Meteo seasonal outlook over the farmer's growing window. Shows climate risks, a verdict for each crop (Continue, Monitor, Reconsider) and next steps. | NASA POWER monthly and daily, Open-Meteo seasonal (ECMWF SEAS5), FAO ECOCROP |
 | Planting & Weather | Finds the months whose mean temperature is inside a crop's ECOCROP optimum, and the longest unbroken window. Charts how far each month sits from the optimum, plus rain during the window. | NASA POWER (30-year normal by default, or the last 1, 3 or 5 years), FAO ECOCROP |
 | Improvement Plan | Builds a season plan on the server from the saved profile: soil, water, variety and timing tasks with due months, plus field notes. | Farm profile, NASA POWER 30-year climatology, crop scorer |
-| Crop Journeys (preview) | Follows one crop from sowing to harvest: a stage-by-stage crop expert that says what to do now and why, a timeline of everything done to it, its stage and progress, and slots for the yield prediction and plant health models. Journeys, entries and ticked steps are saved per account; the models and expert run on clearly labelled mock data until they are connected. | SQLite (`journeys.py`), mock data (`clim_frontend/lib/journeys-mock.ts`) |
+| Crop Journeys | Follows one crop (any of the 30) from sowing to harvest: a timeline of everything done to it, its stage and progress, and a **crop expert**. The expert gives field alerts from rules on the real forecast (frost, heat, heavy rain, dry spell, overdue steps), plus a stage-by-stage playbook and a reaction to each entry written by Gemini from this field's real data. Journeys, entries and ticked steps are saved per account. The yield and plant-health panels still run on labelled mock data until those models are connected. | SQLite (`journeys.py`), Gemini (`services/expert.py`), Open-Meteo, NASA POWER, FAO ECOCROP; mock data (`clim_frontend/lib/journeys-mock.ts`) |
 | AI Assistant | Answers farming questions in plain language using the farmer's profile as context. | Google Gemini (server-side) |
 | Overview | Location search with a satellite map, live conditions, the 30-year climate normal, active weather alerts (US only), and the next tasks from the season plan. | OpenStreetMap Nominatim, Open-Meteo forecast, US National Weather Service, NASA POWER, season plan |
 | Farm Profile, sign-up and sign-in | Farmer accounts and the saved farm details every tool starts from. | SQLite, OpenStreetMap Nominatim (location picker, called from the browser) |
 
 ## How the scoring works
 
-ClimateCrop AI is rule-based and transparent. There is no trained machine-learning model.
+ClimateCrop AI's scores and alerts are rule-based and transparent. There is no trained machine-learning model. Generative AI (Gemini) is used only to write advice text, from facts the app supplies, and that text is checked before it is shown (see the crop expert below).
 
 - **Crop score** (`clim_backend/crop_suitability.py`): each crop gets a 0 to 1 score for warmth, water, and soil pH and type when known. The score is 1 inside the crop's ideal range and slides to 0 at its survival limit. The overall score is `60% × weakest factor + 40% × average`, because a crop is only as strong as its weakest need. The levels are Great fit (80+), Good fit (60+), Possible with care (40+) and Not recommended. The best planting month is found by trying every start month. Expected harvest is the crop's typical good-year yield × the score.
 - **Crop ranges**: temperature, rainfall and pH ranges come from **FAO ECOCROP**, matched by scientific name. This is the same database the season and planting tools use, so every page agrees. `crops.json` adds the season length, soil textures and typical yield, which are approximate prototype values.
 - **Season risks** (`services/season.py`): fixed thresholds. A hot month has a mean above 86°F, an extreme day goes above 95°F, a dry month gets under 1 in of rain, a very wet month gets over 8 in, and waterlogging means consecutive months above 6 in. The thresholds are returned with every rating.
+- **Crop expert** (`services/expert.py`, `services/expert_alerts.py`):
+  - **Alerts are rules, never AI:** frost (forecast low ≤ 0 °C for a frost-tender crop), heat (forecast high above the ECOCROP maximum), heavy rain (≥ 50 mm in 3 days), dry spell (< 5 mm in 10 days, no watering logged, not irrigated), and steps still open late in a stage.
+  - **The playbook is AI text in a fixed format:** Gemini gets a fact sheet (journey, timeline, profile, ECOCROP limits, NASA 30-year normal, the past 10 days of rain, the 7-day forecast) and must answer in a JSON schema.
+  - **The answer is rejected if it gives a product dose or rate, or uses a number above 10 that isn't in the facts.** It is retried once, then the general playbook is used instead.
+  - The playbook is stored per journey so it doesn't change on every refresh.
 - **Season plan** (`services/season_plan.py`): each task is triggered by the analysis. For example, a soil test is added when pH is unknown, a water plan when the crop's season is dry and the farm isn't irrigated, and drainage checks when rain exceeds the crop's range. Each task states the numbers that triggered it.
 
 ## Data sources
@@ -44,7 +49,7 @@ ClimateCrop AI is rule-based and transparent. There is no trained machine-learni
 ## Technologies
 
 - **Frontend:** Next.js 16, React 19, TypeScript, Tailwind CSS 4, Recharts, Leaflet, Vercel AI SDK (Gemini for the assistant).
-- **Backend:** Python, Flask 3, flask-cors, SQLite. The standard library does the rest; there is no pandas or scikit-learn.
+- **Backend:** Python, Flask 3, flask-cors, SQLite, `google-genai` (Gemini for the crop expert). The standard library does the rest; there is no pandas or scikit-learn.
 - **Design:** the "Seed Packet" system, documented in [`DESIGN.md`](DESIGN.md), with product notes in [`PRODUCT.md`](PRODUCT.md).
 
 ## Project structure
@@ -67,8 +72,10 @@ climAi/
 │   │   ├── weather.py            Overview: live conditions, NWS alerts, climate normal
 │   │   └── season_plan.py        Season plan tasks
 │   ├── data/ecocrop.csv          Cached ECOCROP database
-│   ├── journeys.py           Crop journeys, entries and expert steps (signed-in)
-│   └── test_app.py, test_accounts.py, test_plan.py, test_weather.py, test_journeys.py
+│   ├── journeys.py           Crop journeys, entries, expert steps and the crop expert routes (signed-in)
+│   ├── services/expert.py         Crop expert: fact sheet, Gemini playbook and reactions, checks, fallback
+│   ├── services/expert_alerts.py  Crop expert field alerts (rules on the forecast)
+│   └── test_app.py, test_accounts.py, test_plan.py, test_weather.py, test_journeys.py, test_expert.py, test_expert_alerts.py
 ├── clim_frontend/                Next.js app (port 3000)
 │   ├── app/                      Pages and the assistant API route
 │   ├── components/               Page components and the shared UI kit
@@ -103,7 +110,7 @@ python app.py
 
 The API runs at `http://127.0.0.1:5001`. Port 5000 is avoided because macOS AirPlay uses it.
 
-`CLIMAI_SECRET_KEY` signs the sign-in cookie, and the backend refuses to start without one of at least 32 characters. Accounts, profiles, plan progress and field notes are stored in `clim_backend/climai.db`, which is created on first use. Set `CLIMAI_DB_PATH` to store it elsewhere. Start with `python app.py` rather than `flask run`, because only `python app.py` turns off the `Secure` cookie flag for the plain-http dev server (Safari drops the cookie otherwise).
+`CLIMAI_SECRET_KEY` signs the sign-in cookie, and the backend refuses to start without one of at least 32 characters. Accounts, profiles, plan progress and field notes are stored in `clim_backend/climai.db`, which is created on first use. Set `CLIMAI_DB_PATH` to store it elsewhere. Add `GOOGLE_GENERATIVE_AI_API_KEY` to `clim_backend/.env` for the crop expert. Without it, journeys show the general playbook and the rule-based alerts still work. `GEMINI_MODEL` optionally overrides the model (default `gemini-3.5-flash-lite`). Start with `python app.py` rather than `flask run`, because only `python app.py` turns off the `Secure` cookie flag for the plain-http dev server (Safari drops the cookie otherwise).
 
 ### 2. Frontend
 
@@ -156,7 +163,7 @@ git push ──> GitHub Actions (tests + build)
 ### 1. Backend on Render (once)
 
 1. Sign in to [render.com](https://render.com) with GitHub.
-2. Choose **New > Blueprint**, then pick this repository. Render reads `render.yaml`, which sets up a free Python web service with a generated `CLIMAI_SECRET_KEY`.
+2. Choose **New > Blueprint**, then pick this repository. Render reads `render.yaml`, which sets up a free Python web service with a generated `CLIMAI_SECRET_KEY`. It asks for `GOOGLE_GENERATIVE_AI_API_KEY` (your Gemini key, for the crop expert).
 3. When it is live, open `https://<your-service>.onrender.com/api/health`. It should say `healthy`. Copy this URL for the next step.
 
 ### 2. Frontend on Vercel (once)
@@ -219,6 +226,8 @@ The browser calls `/backend/*` on the Next.js site, and `next.config.mjs` forwar
 | POST | `/api/journeys` | `{"crop" (any name from /api/journeys/crops), "sownOn", "location"}` | `201 {"journey"}`, with its sowing entry |
 | POST | `/api/journeys/<id>/entries` | `{"date", "type", "details"}` | `201 {"entry"}` (`404` for another farmer's journey) |
 | PUT | `/api/journeys/<id>/steps/<step_id>` | `{"done": true}` | `200 {"id", "done"}` |
+| GET | `/api/journeys/<id>/expert` | none | `200 {source: "ai" or "general", model, generatedAt, day, stage, stages, alerts, reaction, basedOn, warnings}`; the playbook is stored after the first AI answer |
+| POST | `/api/journeys/<id>/expert/refresh` | none | Same shape; rewrites the playbook (5 per farmer per hour, then `429`) |
 
 Passwords must be 8 to 128 characters and are stored as scrypt hashes. Sign-in returns `429` after 10 failed attempts for one email within 15 minutes; that count is kept in memory and resets when the backend restarts.
 

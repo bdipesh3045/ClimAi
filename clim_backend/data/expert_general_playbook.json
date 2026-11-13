@@ -1,0 +1,30 @@
+{
+  "_note": "General stage playbook, used when the AI expert is unavailable. Same content as the frontend's general mock.",
+  "stages": [
+    {"stage": "Germination", "summary": "The crop is getting established. An even stand now sets up the rest of the season.",
+     "steps": [
+       {"id": "gen-moisture", "title": "Keep the seedbed moist", "why": "Seeds and young plants need steady moisture to establish evenly.", "logsAs": "watering"},
+       {"id": "gen-stand", "title": "Check the stand for gaps", "why": "Gaps found early can still be replanted.", "logsAs": "note"}],
+     "watchFor": ["Soil crusting after heavy rain", "Seedlings dying off in wet, cold soil"]},
+    {"stage": "Growing", "summary": "The plants are building leaves and roots. Keep competition and pests down.",
+     "steps": [
+       {"id": "gen-weeds", "title": "Control weeds early", "why": "Weeds take the most yield while the crop is young.", "logsAs": "pesticide"},
+       {"id": "gen-feed", "title": "Feed the crop if it looks pale", "why": "Pale, slow growth often means the crop needs nutrients.", "logsAs": "fertilizer"},
+       {"id": "gen-scout", "title": "Scout for pests weekly", "why": "Pests are cheapest to manage before numbers build up.", "logsAs": "note"}],
+     "watchFor": ["Leaf damage from insects", "Yellowing leaves"]},
+    {"stage": "Flowering", "summary": "The crop is flowering or forming its harvest. Stress now costs the most.",
+     "steps": [
+       {"id": "gen-water", "title": "Keep water steady", "why": "Drought during flowering and fruit set does the most damage.", "logsAs": "watering"},
+       {"id": "gen-disease", "title": "Check leaves for disease", "why": "Disease spreads fast in warm, humid weather.", "logsAs": "photo"}],
+     "watchFor": ["Wilting in the afternoon heat", "Spots or mould on leaves"]},
+    {"stage": "Maturing", "summary": "The harvest is filling out. Protect it and get ready to harvest.",
+     "steps": [
+       {"id": "gen-plan", "title": "Plan the harvest", "why": "Harvesting at the right moment protects both yield and quality.", "logsAs": "note"}],
+     "watchFor": ["Storm damage or lodging", "Late pests"]},
+    {"stage": "Ready to harvest", "summary": "The season is done. Harvest promptly and write down what you learned.",
+     "steps": [
+       {"id": "gen-harvest", "title": "Harvest", "why": "Delays risk weather damage and lower quality.", "logsAs": "note"},
+       {"id": "gen-record", "title": "Record the yield", "why": "Your own numbers make next season's plan sharper than any average.", "logsAs": "note"}],
+     "watchFor": ["Rain delays at harvest"]}
+  ]
+}

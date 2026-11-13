@@ -81,6 +81,39 @@ def current_conditions(lat, lon):
     }
 
 
+_forecast_cache = {}
+
+
+def daily_forecast(lat, lon, days=7):
+    """Next `days` days from Open-Meteo, plus the past 10 days of rain, as one list of
+    {"date", "tmaxC", "tminC", "rainMm", "past"} dicts. Cached for 10 minutes per point."""
+    key = (round(lat, 2), round(lon, 2), days)
+    cached = _forecast_cache.get(key)
+    if cached and time.monotonic() - cached[0] < CACHE_SECONDS:
+        return cached[1]
+    query = urllib.parse.urlencode({
+        "latitude": lat, "longitude": lon,
+        "daily": "temperature_2m_max,temperature_2m_min,precipitation_sum",
+        "past_days": 10, "forecast_days": days, "timezone": "auto",
+    })
+    data = _get_json(f"{OPEN_METEO_URL}?{query}")
+    try:
+        daily = data["daily"]
+        rows = []
+        for i, day in enumerate(daily["time"]):
+            rows.append({
+                "date": day,
+                "tmaxC": daily["temperature_2m_max"][i],
+                "tminC": daily["temperature_2m_min"][i],
+                "rainMm": daily["precipitation_sum"][i] or 0.0,
+                "past": i < 10,
+            })
+    except (KeyError, TypeError, IndexError) as error:
+        raise WeatherUnavailable(f"Open-Meteo forecast was incomplete: {error!r}") from error
+    _forecast_cache[key] = (time.monotonic(), rows)
+    return rows
+
+
 def active_alerts(lat, lon):
     """Active NWS alerts for the point. Returns None outside NWS coverage (non-US points)."""
     query = urllib.parse.urlencode({"point": f"{lat:.4f},{lon:.4f}"})

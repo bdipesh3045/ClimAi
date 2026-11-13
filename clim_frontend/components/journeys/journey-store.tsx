@@ -23,7 +23,12 @@ type JourneyStore = {
   clearSyncError: () => void;
   addEntry: (journeyId: string, entry: Omit<JourneyEntry, "id">) => void;
   /** Saves the journey and resolves to its id; throws with a message the form can show. */
-  addJourney: (input: { crop: JourneyCrop; sownOn: string; location: string }) => Promise<string>;
+  addJourney: (input: {
+    crop: JourneyCrop;
+    sownOn: string;
+    location: string;
+    coordinates?: { lat: number; lon: number } | null;
+  }) => Promise<string>;
   /** Expert-guide steps marked done, per journey. */
   doneSteps: Record<string, string[]>;
   setStepDone: (journeyId: string, stepId: string, done: boolean) => void;
@@ -99,9 +104,10 @@ export function JourneyProvider({ children }: { children: React.ReactNode }) {
 
   const isSaved = (journeyId: string) => journeysRef.current?.find((j) => j.id === journeyId)?.sample === false;
 
-  const addJourney = useCallback<JourneyStore["addJourney"]>(async ({ crop, sownOn, location }) => {
+  const addJourney = useCallback<JourneyStore["addJourney"]>(async ({ crop, sownOn, location, coordinates }) => {
     try {
-      const data = await apiFetch("/journeys", { method: "POST", body: { crop, sownOn, location } });
+      const body = coordinates ? { crop, sownOn, location, coordinates } : { crop, sownOn, location };
+      const data = await apiFetch("/journeys", { method: "POST", body });
       const journey = readJourney((data as { journey?: unknown } | null)?.journey);
       setJourneys((current) => [journey, ...(current ?? [])]);
       setDoneSteps((current) => ({ ...current, [journey.id]: journey.doneSteps }));

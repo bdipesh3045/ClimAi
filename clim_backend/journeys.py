@@ -6,25 +6,24 @@ cookie identifies the farmer. Photos are not stored yet; entries keep their text
 """
 import json
 import re
+import time
 from datetime import date
-from pathlib import Path
 
-from flask import Blueprint, jsonify, request
+from flask import Blueprint, current_app, jsonify, request
 
-from accounts import SIGN_IN_MESSAGE, error, json_body, now_iso, signed_in_user
+from accounts import SIGN_IN_MESSAGE, error, json_body, load_profile, now_iso, signed_in_user
 from db import get_db
-from validation import clean_text
+from services import expert, weather
+from services.climate import ClimateUnavailable, fetch_monthly_climate
+from services.crops import ecocrop_ranges
+from services.expert_alerts import field_alerts
+from services.journey_crops import CROPS, crop_list
+from validation import clean_text, in_range
 
 bp = Blueprint("journeys", __name__, url_prefix="/api")
 
 # Every crop in crops.json can start a journey; its season_days sets the expected harvest.
-# "Soybean" is shown as "Soybeans", the name the journey pages and models already use.
-DISPLAY_NAMES = {"Soybean": "Soybeans"}
-_CROPS = [
-    {"name": DISPLAY_NAMES.get(c["name"], c["name"]), "category": c["category"], "seasonDays": c["season_days"]}
-    for c in json.loads((Path(__file__).with_name("crops.json")).read_text())["crops"]
-]
-SEASON_DAYS = {c["name"]: c["seasonDays"] for c in _CROPS}
+SEASON_DAYS = {name: crop["seasonDays"] for name, crop in CROPS.items()}
 ACTIONS = ("sowing", "watering", "pesticide", "fertilizer", "photo", "note")
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
 STEP_ID_PATTERN = re.compile(r"[a-z0-9-]{1,60}")
@@ -55,6 +54,20 @@ def _parse_date(value, label):
     return parsed
 
 
+def _coordinates(value, user_id):
+    """The field's coordinates from the form, else the profile farm's, else (None, None)."""
+    if value is not None:
+        lat = value.get("lat") if isinstance(value, dict) else None
+        lon = value.get("lon") if isinstance(value, dict) else None
+        if not (in_range(lat, -90, 90) and in_range(lon, -180, 180)):
+            raise ValueError("Coordinates must be a real latitude and longitude.")
+        return float(lat), float(lon)
+    profile = load_profile(user_id)
+    if profile:
+        return profile["coordinates"]["lat"], profile["coordinates"]["lon"]
+    return None, None
+
+
 def _owned_journey(journey_id, user_id):
     return get_db().execute(
         "SELECT * FROM journeys WHERE id = ? AND user_id = ?", (journey_id, user_id)
@@ -77,6 +90,9 @@ def _journey_json(row):
         "location": row["location"],
         "sownOn": row["sown_on"],
         "seasonDays": row["season_days"],
+        "coordinates": (
+            {"lat": row["lat"], "lon": row["lon"]} if row["lat"] is not None and row["lon"] is not None else None
+        ),
         "sample": False,
         "entries": [_entry_json(entry) for entry in entries],
         "doneSteps": [step["step_id"] for step in steps],
@@ -86,7 +102,7 @@ def _journey_json(row):
 @bp.get("/journeys/crops")
 def journey_crops():
     """Crops a journey can follow, grouped by category in crops.json order."""
-    return jsonify({"crops": _CROPS}), 200
+    return jsonify({"crops": crop_list()}), 200
 
 
 @bp.get("/journeys")
@@ -112,6 +128,7 @@ def create_journey():
         if sown_on < EARLIEST_SOWING:
             raise ValueError("Sowing date is too far in the past.")
         location = clean_text(payload.get("location"), "Location", MAX_LOCATION_LENGTH, required=True)
+        lat, lon = _coordinates(payload.get("coordinates"), user["id"])
     except ValueError as message:
         return error(str(message), 400)
 
@@ -122,8 +139,9 @@ def create_journey():
     created = now_iso()
     with db:
         cursor = db.execute(
-            "INSERT INTO journeys (user_id, crop, location, sown_on, season_days, created_at) VALUES (?, ?, ?, ?, ?, ?)",
-            (user["id"], crop, location, sown_on.isoformat(), SEASON_DAYS[crop], created),
+            "INSERT INTO journeys (user_id, crop, location, sown_on, season_days, created_at, lat, lon) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (user["id"], crop, location, sown_on.isoformat(), SEASON_DAYS[crop], created, lat, lon),
         )
         db.execute(
             "INSERT INTO journey_entries (journey_id, entry_date, action, details, created_at) VALUES (?, ?, 'sowing', ?, ?)",
@@ -188,3 +206,166 @@ def set_step(journey_id, step_id):
         else:
             db.execute("DELETE FROM journey_steps WHERE journey_id = ? AND step_id = ?", (journey_id, step_id))
     return jsonify({"id": step_id, "done": payload["done"]}), 200
+
+
+# --------------------------------------------------------------- crop expert
+
+REFRESH_LIMIT = 5  # playbook regenerations per farmer per hour
+REFRESH_WINDOW_SECONDS = 3600
+AI_RETRY_AFTER_SECONDS = 600  # after a failed AI call, use the general playbook for 10 minutes
+_refreshes = {}
+_ai_failed_at = {}
+
+
+def _ai_recently_failed(key):
+    failed = _ai_failed_at.get(key)
+    return failed is not None and time.monotonic() - failed < AI_RETRY_AFTER_SECONDS
+
+
+def _allow_refresh(user_id):
+    now = time.monotonic()
+    recent = [t for t in _refreshes.get(user_id, []) if now - t < REFRESH_WINDOW_SECONDS]
+    if len(recent) >= REFRESH_LIMIT:
+        _refreshes[user_id] = recent
+        return False
+    _refreshes[user_id] = recent + [now]
+    return True
+
+
+def _expert_view(journey, user_id, regenerate=False):
+    db = get_db()
+    crop = CROPS.get(journey["crop"])
+    if crop is None:
+        return error("This journey's crop is no longer supported.", 409)
+    entries = [dict(row) for row in db.execute(
+        "SELECT * FROM journey_entries WHERE journey_id = ? ORDER BY entry_date, id", (journey["id"],)
+    ).fetchall()]
+    timeline = [{"date": e["entry_date"], "type": e["action"], "details": e["details"]} for e in entries]
+    done = {r["step_id"] for r in db.execute("SELECT step_id FROM journey_steps WHERE journey_id = ?", (journey["id"],))}
+
+    season_days = journey["season_days"]
+    day = max(0, (date.today() - date.fromisoformat(journey["sown_on"])).days)
+    stage, stage_share = expert.current_stage(day, season_days)
+    profile = load_profile(user_id)
+    lat, lon = journey["lat"], journey["lon"]
+    if lat is None and profile:
+        lat, lon = profile["coordinates"]["lat"], profile["coordinates"]["lon"]
+
+    based_on, warnings = ["your journey timeline", "the crop's typical season length"], []
+    if profile:
+        based_on.append("your farm profile (soil, irrigation)")
+    ecocrop = ecocrop_ranges(crop["scientific"])
+    if ecocrop:
+        based_on.append("FAO ECOCROP crop limits")
+    climate = forecast = None
+    if lat is not None:
+        try:
+            climate = fetch_monthly_climate(round(lat, 2), round(lon, 2))
+            based_on.append("NASA POWER 30-year climate normal")
+        except ClimateUnavailable:
+            warnings.append("The 30-year climate normal is unavailable right now.")
+        try:
+            forecast = weather.daily_forecast(lat, lon)
+            based_on.append("Open-Meteo 7-day forecast")
+        except weather.WeatherUnavailable:
+            warnings.append("The weather forecast is unavailable right now, so weather alerts are paused.")
+    else:
+        warnings.append("This journey has no location, so there are no weather alerts.")
+
+    facts = expert.build_facts(dict(journey), crop, day, stage, timeline, profile, ecocrop, climate, forecast,
+                               lat is not None)
+
+    # Playbook: stored AI answer, else generate, else the general playbook.
+    stored = db.execute("SELECT * FROM journey_guides WHERE journey_id = ?", (journey["id"],)).fetchone()
+    ai_key = ("playbook", journey["id"])
+    if stored and not regenerate:
+        stages, source, model, generated_at = json.loads(stored["content"]), stored["source"], stored["model"], stored["created_at"]
+    elif _ai_recently_failed(ai_key) and not regenerate:
+        stages, source, model, generated_at = expert.general_playbook(), "general", None, None
+    else:
+        try:
+            stages, model = expert.generate_playbook(facts)
+            source, generated_at = "ai", now_iso()
+            with db:
+                db.execute(
+                    "INSERT INTO journey_guides (journey_id, content, source, model, created_at) VALUES (?, ?, 'ai', ?, ?) "
+                    "ON CONFLICT (journey_id) DO UPDATE SET content = excluded.content, source = 'ai', "
+                    "model = excluded.model, created_at = excluded.created_at",
+                    (journey["id"], json.dumps(stages), model, generated_at),
+                )
+            _ai_failed_at.pop(ai_key, None)
+        except (expert.ExpertUnavailable, expert.ExpertInvalid) as problem:
+            current_app.logger.warning("Crop expert playbook fell back to general guidance: %s", problem)
+            _ai_failed_at[ai_key] = time.monotonic()
+            if stored:  # keep the last good AI playbook rather than replacing it with general text
+                stages, source, model, generated_at = json.loads(stored["content"]), stored["source"], stored["model"], stored["created_at"]
+            else:
+                stages, source, model, generated_at = expert.general_playbook(), "general", None, None
+
+    ranges = {r["stage"]: r for r in expert.stage_ranges(season_days)}
+    for s in stages:
+        s["fromDay"], s["toDay"] = ranges[s["stage"]]["fromDay"], ranges[s["stage"]]["toDay"]
+
+    # Alerts: deterministic rules on the forecast.
+    current = next((s for s in stages if s["stage"] == stage), None)
+    open_steps = [step["title"] for step in (current["steps"] if current else []) if step["id"] not in done]
+    limits = {"tempMinC": ecocrop["temp_abs"][0], "tempMaxC": ecocrop["temp_abs"][1]} if ecocrop else None
+    irrigated = bool(profile["irrigation"]["available"]) if profile else None
+    alerts = field_alerts(forecast, limits, irrigated, timeline, date.today().isoformat(), open_steps, stage_share) if forecast else []
+
+    # Reaction to the latest entry: stored, else AI, else a general line.
+    reaction = None
+    if entries:
+        latest = entries[-1]
+        if latest["expert_note"]:
+            reaction = {"entryId": f"e{latest['id']}", "text": latest["expert_note"], "source": "ai"}
+        else:
+            text, source_r = expert.GENERAL_REACTIONS.get(latest["action"], ""), "general"
+            reaction_key = ("reaction", latest["id"])
+            if not _ai_recently_failed(reaction_key):
+                try:
+                    text = expert.generate_reaction(facts, timeline[-1])
+                    source_r = "ai"
+                    with db:
+                        db.execute("UPDATE journey_entries SET expert_note = ? WHERE id = ?", (text, latest["id"]))
+                except (expert.ExpertUnavailable, expert.ExpertInvalid) as problem:
+                    current_app.logger.warning("Crop expert reaction fell back: %s", problem)
+                    _ai_failed_at[reaction_key] = time.monotonic()
+            reaction = {"entryId": f"e{latest['id']}", "text": text, "source": source_r}
+
+    return jsonify({
+        "source": source,
+        "model": model,
+        "generatedAt": generated_at,
+        "day": day,
+        "stage": stage,
+        "stages": stages,
+        "alerts": alerts,
+        "reaction": reaction,
+        "basedOn": based_on,
+        "warnings": warnings,
+    }), 200
+
+
+@bp.get("/journeys/<int:journey_id>/expert")
+def journey_expert(journey_id):
+    user, failure = _require_user()
+    if failure:
+        return failure
+    journey = _owned_journey(journey_id, user["id"])
+    if journey is None:
+        return error("That journey does not exist.", 404)
+    return _expert_view(journey, user["id"])
+
+
+@bp.post("/journeys/<int:journey_id>/expert/refresh")
+def refresh_journey_expert(journey_id):
+    user, failure = _require_user()
+    if failure:
+        return failure
+    journey = _owned_journey(journey_id, user["id"])
+    if journey is None:
+        return error("That journey does not exist.", 404)
+    if not _allow_refresh(user["id"]):
+        return error("You've refreshed the advice a lot. Please wait a while and try again.", 429)
+    return _expert_view(journey, user["id"], regenerate=True)
