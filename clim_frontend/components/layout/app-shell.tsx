@@ -12,6 +12,7 @@ import {
   MapPin,
   Menu,
   MessageCircle,
+  Route,
   Sprout,
   UserRound,
   Wheat,
@@ -46,6 +47,7 @@ const navigation: Array<{ label: string | null; items: NavItem[] }> = [
   {
     label: "Act",
     items: [
+      { title: "Crop Journeys", href: "/journeys", icon: Route },
       { title: "Improvement Plan", href: "/improvement-plan", icon: ListChecks },
       { title: "AI Assistant", href: "/assistant", icon: MessageCircle },
     ],
@@ -62,6 +64,7 @@ const pageTitles: Record<string, string> = {
   "/crop-finder/results": "Crop Results",
   "/season-comparison": "Season Comparison",
   "/improvement-plan": "Improvement Plan",
+  "/journeys": "Crop Journeys",
   "/planting-weather": "Planting & Weather",
   "/assistant": "AI Assistant",
   "/profile": "Farm Profile",
@@ -231,7 +234,7 @@ function ShellContent({ children }: { children: React.ReactNode }) {
               <Menu size={20} aria-hidden="true" />
             </button>
             <p className="truncate font-heading text-[15px] font-bold text-ink">
-              {pageTitles[pathname] ?? "ClimateCrop AI"}
+              {pageTitles[pathname] ?? (pathname.startsWith("/journeys/") ? "Crop Journey" : "ClimateCrop AI")}
             </p>
           </div>
           <Link

@@ -8,6 +8,7 @@ import {
   CloudSun,
   ListChecks,
   MapPin,
+  Route,
   Sprout,
   ThermometerSun,
   Wheat,
@@ -105,6 +106,27 @@ export function OverviewDashboard() {
           </ul>
         </Panel>
       </div>
+
+      <Link
+        href="/journeys"
+        className="group flex flex-col gap-3 rounded-[14px] border border-line bg-panel p-5 transition-[border-color,box-shadow] hover:border-forest-mid/40 hover:shadow-[0_12px_28px_-16px_rgb(18_48_31/0.3)] sm:flex-row sm:items-center sm:justify-between sm:p-6"
+      >
+        <span className="flex items-start gap-3.5">
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-[10px] bg-forest text-white">
+            <Route size={19} strokeWidth={1.9} aria-hidden="true" />
+          </span>
+          <span>
+            <span className="block font-heading text-[16px] font-bold text-ink">My crop journeys</span>
+            <span className="mt-1 block text-[14px] leading-[1.55] text-ink-soft">
+              Follow each crop from sowing to harvest: what was done, how it is growing and what comes next.
+            </span>
+          </span>
+        </span>
+        <span className="inline-flex shrink-0 items-center gap-1.5 text-[14px] font-semibold text-forest">
+          Open journeys
+          <ArrowRight size={15} className="transition-transform group-hover:translate-x-1" aria-hidden="true" />
+        </span>
+      </Link>
 
       <CurrentPanel weather={weather} locationLabel={locationLabel} hasPoint={point !== null} />
 
