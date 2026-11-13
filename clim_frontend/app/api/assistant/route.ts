@@ -4,6 +4,7 @@ import {
   buildInstructions,
   createRateLimiter,
   keepRecentMessages,
+  readJourneyContext,
 } from "@/lib/assistant";
 import { createAssistantResponse } from "@/lib/assistant-stream";
 import { parseAccount, type Account } from "@/lib/session";
@@ -183,7 +184,13 @@ export async function POST(request: Request) {
   try {
     return createAssistantResponse({
       model: google(MODEL_ID),
-      instructions: buildInstructions(profile),
+      // Optional: sent by the journey page's side panel. Malformed context is ignored.
+      instructions: buildInstructions(
+        profile,
+        typeof payload === "object" && payload !== null && "journey" in payload
+          ? readJourneyContext((payload as { journey: unknown }).journey)
+          : null,
+      ),
       messages: await convertToModelMessages(read.messages),
       abortSignal: request.signal,
     });

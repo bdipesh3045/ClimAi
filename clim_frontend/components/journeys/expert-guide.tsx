@@ -1,7 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import Link from "next/link";
+import { useCallback, useEffect, useState } from "react";
 import {
   ArrowRight,
   Check,
@@ -20,6 +19,8 @@ import {
 import { Panel, PanelHead, Pill, Skeleton, StateBlock, buttonClass } from "@/components/shared/ui-kit";
 import { useJourneys } from "@/components/journeys/journey-store";
 import { useExpert, type ExpertAlert, type ExpertData } from "@/components/journeys/use-expert";
+import { JourneyAssistant } from "@/components/journeys/journey-assistant";
+import type { JourneyContext } from "@/lib/assistant";
 import { ACTION_LABELS, HARVEST_STAGE, formatDate, sortedEntries, todayIso, type ActionType, type Journey } from "@/lib/journeys";
 import { cn } from "@/lib/utils";
 
@@ -129,6 +130,32 @@ function ExpertBody({
   const doneCount = guide.steps.filter((step) => done.has(step.id)).length;
   const latest = sortedEntries(journey)[0];
   const when = viewing === currentIndex ? "now" : viewing < currentIndex ? "past" : "next";
+  const [chatOpen, setChatOpen] = useState(false);
+  const closeChat = useCallback(() => setChatOpen(false), []);
+
+  // What the assistant knows about this journey: stage, timeline, the expert's steps and the real alerts.
+  const current = stages[currentIndex];
+  const chatContext: JourneyContext = {
+    crop: journey.crop,
+    location: journey.location,
+    sownOn: journey.sownOn,
+    day: data.day,
+    seasonDays: journey.seasonDays,
+    stage: data.stage,
+    entries: [...journey.entries]
+      .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0))
+      .map((e) => ({ date: e.date, type: e.type, details: e.details.slice(0, 200) })),
+    alerts: data.alerts.map((a) => ({ title: a.title, detail: a.detail })),
+    currentSteps: current ? current.steps.filter((s) => !done.has(s.id)).map((s) => s.title) : [],
+  };
+  const crop = journey.crop.toLowerCase();
+  const chatSuggestions = [
+    `What should I do this week for my ${crop}?`,
+    "Is this a good week to spray or fertilize?",
+    `What pests or diseases should I watch for at the ${data.stage.toLowerCase()} stage?`,
+    `How will the coming weather affect my ${crop}?`,
+    "When should I plan the harvest?",
+  ];
 
   function markDone(stepId: string, title: string, logsAs: ActionType) {
     setStepDone(journey.id, stepId, true);
@@ -298,10 +325,16 @@ function ExpertBody({
               ))}
             </ul>
           </div>
-          <Link href="/assistant" className={buttonClass({ variant: "secondary", className: "w-full" })}>
+          <button
+            type="button"
+            onClick={() => setChatOpen(true)}
+            aria-haspopup="dialog"
+            className={buttonClass({ variant: "secondary", className: "w-full" })}
+          >
             <MessageCircle size={16} aria-hidden="true" />
-            Ask the AI Assistant a question
-          </Link>
+            Ask the AI Assistant about this crop
+          </button>
+          <JourneyAssistant open={chatOpen} onClose={closeChat} journey={chatContext} suggestions={chatSuggestions} />
           {data.source !== "sample" && (
             <button
               type="button"

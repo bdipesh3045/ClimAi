@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useChat } from "@ai-sdk/react";
 import { APICallError, DefaultChatTransport, type UIMessage } from "ai";
@@ -8,6 +8,7 @@ import { ArrowUp, LoaderCircle, MessageCircle, Sprout } from "lucide-react";
 import { useAuth } from "@/components/providers/auth-provider";
 import type { FarmerProfile } from "@/lib/session";
 import { ASSISTANT_ERRORS, isAssistantErrorMessage } from "@/lib/assistant-errors";
+import type { JourneyContext } from "@/lib/assistant";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Marker, MarkerContent } from "@/components/ui/marker";
@@ -41,12 +42,18 @@ const suggestedQuestions = [
 const MAX_SENT_MESSAGES = 11;
 
 // Send only the latest messages so a long chat keeps working within the route's limits.
-const transport = new DefaultChatTransport({
-  api: "/api/assistant",
-  prepareSendMessagesRequest: ({ messages }) => ({
-    body: { messages: messages.slice(-MAX_SENT_MESSAGES) },
-  }),
-});
+// On a journey page, the journey's facts go along with every question.
+function createTransport(journeyRef: { current: JourneyContext | undefined }) {
+  return new DefaultChatTransport({
+    api: "/api/assistant",
+    prepareSendMessagesRequest: ({ messages }) => ({
+      body: {
+        messages: messages.slice(-MAX_SENT_MESSAGES),
+        ...(journeyRef.current ? { journey: journeyRef.current } : {}),
+      },
+    }),
+  });
+}
 
 const HTTP_UNAUTHORIZED = 401;
 const HTTP_TOO_MANY_REQUESTS = 429;
@@ -80,8 +87,18 @@ function profileLabel(profile: FarmerProfile | null, isMissing: boolean): string
   return isMissing ? "No farm profile saved yet" : "Loading your profile…";
 }
 
-export function ClimateChat() {
+/**
+ * The AI Assistant chat. On its own page it uses the farm profile; given a `journey`
+ * (the journey page's side panel) it also knows that crop's stage, timeline and alerts.
+ */
+export function ClimateChat({
+  journey,
+  suggestions = suggestedQuestions,
+}: { journey?: JourneyContext; suggestions?: readonly string[] } = {}) {
   const { state } = useAuth();
+  const journeyRef = useRef(journey);
+  journeyRef.current = journey;
+  const [transport] = useState(() => createTransport(journeyRef));
   const profile = state.status === "signed-in" ? state.account.profile : null;
   // Only true once sign-in has resolved, so the "add profile" prompt does not flash while loading.
   const isProfileMissing = state.status === "signed-in" && profile === null;
@@ -138,7 +155,9 @@ export function ClimateChat() {
             <div>
               <p className="text-xs font-semibold">ClimateAI assistant</p>
               <p className="mt-0.5 text-[10px] text-[#899289]">
-                {profileLabel(profile, isProfileMissing)}
+                {journey
+                  ? `About your ${journey.crop.toLowerCase()} · ${journey.stage}, day ${journey.day}`
+                  : profileLabel(profile, isProfileMissing)}
               </p>
             </div>
           </div>
@@ -151,12 +170,12 @@ export function ClimateChat() {
                 <MessageCircle size={21} />
               </span>
               <h2 className="mt-4 font-heading text-xl font-bold tracking-[-0.03em]">
-                What would you like to understand?
+                {journey ? `Ask about your ${journey.crop.toLowerCase()}` : "What would you like to understand?"}
               </h2>
               <p className="mt-2 max-w-md text-xs leading-5 text-[#7b857b]">
-                Ask about your farm, or start with one of these questions. The
-                assistant uses your saved profile and says when something is
-                missing instead of guessing.
+                {journey
+                  ? "The assistant knows this crop's stage, what you've logged and the field alerts, and says when something is missing instead of guessing."
+                  : "Ask about your farm, or start with one of these questions. The assistant uses your saved profile and says when something is missing instead of guessing."}
               </p>
               {isProfileMissing && (
                 <p className="mt-3 text-xs text-[#7b857b]">
@@ -170,7 +189,7 @@ export function ClimateChat() {
                 </p>
               )}
               <div className="mt-6 flex max-w-2xl flex-wrap justify-center gap-2">
-                {suggestedQuestions.map((question) => (
+                {suggestions.map((question) => (
                   <button
                     key={question}
                     type="button"
@@ -224,9 +243,11 @@ export function ClimateChat() {
                               </Bubble>
                               {!isUser && (
                                 <MessageFooter className="px-1 pt-1 text-[9px]">
-                                  {profile === null
-                                    ? "General guidance"
-                                    : "Based on your farm profile"}{" "}
+                                  {journey
+                                    ? "Based on this journey and your farm"
+                                    : profile === null
+                                      ? "General guidance"
+                                      : "Based on your farm profile"}{" "}
                                   · not field advice
                                 </MessageFooter>
                               )}
@@ -331,7 +352,9 @@ export function ClimateChat() {
           <div className="mt-2 flex flex-wrap items-center justify-between gap-2 px-1">
             <Marker className="text-[9px]">
               <MarkerContent>
-                Uses your saved farm profile · no live weather or soil feed
+                {journey
+                  ? "Uses this journey, your farm profile and the field alerts"
+                  : "Uses your saved farm profile · no live weather or soil feed"}
               </MarkerContent>
             </Marker>
             <span className="text-[9px] text-[#9aa39a]">
