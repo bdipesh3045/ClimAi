@@ -4,7 +4,6 @@
 // Each export has the same shape as the real thing that will replace it:
 //   MOCK_JOURNEYS        -> journeys from the backend (per account)
 //   MOCK_NEXT_ACTIONS    -> next-action rules or the AI
-//   mockHealthCheck()    -> the plant health image model
 //   MOCK_EXPERT_GUIDE, mockExpertReaction() -> the AI crop expert
 // Swap one function body at a time; the components do not need to change.
 // ===========================================================================
@@ -106,34 +105,6 @@ export function mockNextAction(crop: JourneyCrop, day: number, seasonDays: numbe
     MOCK_NEXT_ACTIONS[crop] ??
     GENERIC_NEXT_ACTIONS.map(({ share, action }) => ({ day: Math.round(share * seasonDays), action }));
   return list.find((item) => item.day >= day) ?? null;
-}
-
-// --------------------------------------------------------------- health model
-
-export type HealthResult =
-  | { status: "healthy"; confidence: number }
-  | { status: "defect"; name: string; confidence: number };
-
-const MOCK_DEFECTS: Record<string, string[]> = {
-  Soybeans: ["Frogeye leaf spot", "Septoria brown spot"],
-  Rice: ["Rice blast", "Brown spot"],
-};
-const GENERIC_DEFECTS = ["Leaf spot", "Possible nutrient deficiency"];
-
-/**
- * PLUG-IN: replace this body with the image model call, e.g.
- *   const body = new FormData(); body.append("image", file); body.append("crop", crop)
- *   const res = await fetch(`${API_BASE}/api/plant-health`, { method: "POST", body })
- *   return (await res.json()) as HealthResult
- */
-export async function mockHealthCheck(file: File, crop: JourneyCrop): Promise<HealthResult> {
-  await new Promise((resolve) => setTimeout(resolve, 1200));
-  // Deterministic by file size, so the same photo always gives the same demo answer.
-  const seed = file.size;
-  const confidence = 0.78 + (seed % 17) / 100;
-  if (seed % 3 === 0) return { status: "healthy", confidence };
-  const defects = MOCK_DEFECTS[crop] ?? GENERIC_DEFECTS;
-  return { status: "defect", name: defects[seed % defects.length], confidence };
 }
 
 // --------------------------------------------------------------- expert guide

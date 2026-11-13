@@ -2,7 +2,8 @@
 
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import { useAuth } from "@/components/providers/auth-provider";
-import { ApiError, apiFetch, errorText } from "@/lib/api";
+import { ApiError, apiFetch, errorText, readErrorMessage } from "@/lib/api";
+import { shrinkPhoto } from "@/lib/plant-check-client";
 import type { Journey, JourneyCrop, JourneyEntry } from "@/lib/journeys";
 import { MOCK_DONE_STEPS, buildMockJourneys } from "@/lib/journeys-mock";
 
@@ -21,7 +22,8 @@ type JourneyStore = {
   /** A save that failed and was undone. */
   syncError: string | null;
   clearSyncError: () => void;
-  addEntry: (journeyId: string, entry: Omit<JourneyEntry, "id">) => void;
+  /** Adds an entry; `photo` (the picked file or a prepared blob) is uploaded once the entry is saved. */
+  addEntry: (journeyId: string, entry: Omit<JourneyEntry, "id"> & { photo?: Blob }) => void;
   /** Saves the journey and resolves to its id; throws with a message the form can show. */
   addJourney: (input: {
     crop: JourneyCrop;
@@ -53,9 +55,37 @@ function isServerJourney(value: unknown): value is ServerJourney {
   );
 }
 
+/** Where a saved entry's photo is served (through the /backend proxy, with the sign-in cookie). */
+function photoPath(journeyId: string, entryId: string) {
+  return `/backend/journeys/${journeyId}/entries/${entryId.replace(/^e/, "")}/photo`;
+}
+
 function readJourney(value: unknown): ServerJourney {
   if (!isServerJourney(value)) throw new ApiError("The server sent an unexpected journey.", 500);
-  return { ...value, sample: false };
+  const entries = value.entries.map((entry) => {
+    const { hasPhoto, ...rest } = entry as JourneyEntry & { hasPhoto?: boolean };
+    return hasPhoto ? { ...rest, photoUrl: photoPath(value.id, rest.id) } : rest;
+  });
+  return { ...value, entries, sample: false };
+}
+
+/** Shrink (a picked file) and upload one entry's photo. Throws with a message to show. */
+async function uploadPhoto(journeyId: string, entryId: string, photo: Blob) {
+  const prepared = photo instanceof File ? await shrinkPhoto(photo) : photo;
+  const form = new FormData();
+  form.append("image", prepared, "photo.jpg");
+  let response: Response;
+  try {
+    response = await fetch(photoPath(journeyId, entryId), {
+      method: "PUT",
+      body: form,
+      credentials: "same-origin",
+      signal: AbortSignal.timeout(30_000),
+    });
+  } catch {
+    throw new ApiError("The photo could not be uploaded. Check your connection.", 0);
+  }
+  if (!response.ok) throw new ApiError(await readErrorMessage(response), response.status);
 }
 
 export function JourneyProvider({ children }: { children: React.ReactNode }) {
@@ -119,7 +149,7 @@ export function JourneyProvider({ children }: { children: React.ReactNode }) {
   }, [expireSession]);
 
   const addEntry = useCallback<JourneyStore["addEntry"]>(
-    (journeyId, entry) => {
+    (journeyId, { photo, ...entry }) => {
       const id = tempId();
       const replace = (update: (entries: JourneyEntry[]) => JourneyEntry[]) =>
         setJourneys((current) => current?.map((j) => (j.id === journeyId ? { ...j, entries: update(j.entries) } : j)) ?? current);
@@ -132,13 +162,19 @@ export function JourneyProvider({ children }: { children: React.ReactNode }) {
       })
         .then((data) => {
           const saved = (data as { entry?: { id?: unknown } } | null)?.entry;
-          if (typeof saved?.id === "string") {
-            replace((entries) => entries.map((e) => (e.id === id ? { ...e, id: saved.id as string } : e)));
+          if (typeof saved?.id !== "string") return;
+          const savedId = saved.id;
+          replace((entries) => entries.map((e) => (e.id === id ? { ...e, id: savedId } : e)));
+          // The entry is saved; now its photo. The local preview stays on screen meanwhile.
+          if (photo) {
+            uploadPhoto(journeyId, savedId, photo).catch((error: unknown) =>
+              handleFailure(error, "The photo could not be saved; the entry text was kept."),
+            );
           }
         })
         .catch((error: unknown) => {
           replace((entries) => entries.filter((e) => e.id !== id));
-          handleFailure(error, "That entry could not be saved.");
+          handleFailure(error, "That entry could not be saved, so it was removed.");
         });
     },
     [handleFailure],
@@ -158,7 +194,7 @@ export function JourneyProvider({ children }: { children: React.ReactNode }) {
       apiFetch(`/journeys/${journeyId}/steps/${encodeURIComponent(stepId)}`, { method: "PUT", body: { done } }).catch(
         (error: unknown) => {
           apply(!done);
-          handleFailure(error, "That step could not be saved.");
+          handleFailure(error, "That step could not be saved, so the tick was undone.");
         },
       );
     },

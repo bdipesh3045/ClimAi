@@ -15,6 +15,7 @@ export function AddEntryForm({ journey, onClose }: { journey: Journey; onClose: 
   const [type, setType] = useState<ActionType>("watering");
   const [details, setDetails] = useState("");
   const [photo, setPhoto] = useState<string | null>(null);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
   const [error, setError] = useState("");
   const fileRef = useRef<HTMLInputElement>(null);
   const kept = useRef(false);
@@ -30,6 +31,7 @@ export function AddEntryForm({ journey, onClose }: { journey: Journey; onClose: 
     if (!file.type.startsWith("image/")) return setError("Choose an image file.");
     setError("");
     setPhoto(URL.createObjectURL(file));
+    setPhotoFile(file);
     if (type === "note") setType("photo");
   }
 
@@ -44,6 +46,7 @@ export function AddEntryForm({ journey, onClose }: { journey: Journey; onClose: 
       type: photo && type !== "photo" && !details.trim() ? "photo" : type,
       details: details.trim() || "Photo added.",
       photoUrl: photo ?? undefined,
+      photo: photoFile ?? undefined, // uploaded (shrunk, location data removed) once the entry is saved
     });
     onClose();
   }
@@ -93,6 +96,7 @@ export function AddEntryForm({ journey, onClose }: { journey: Journey; onClose: 
                 onClick={() => {
                   URL.revokeObjectURL(photo);
                   setPhoto(null);
+                  setPhotoFile(null);
                   if (fileRef.current) fileRef.current.value = "";
                 }}
                 className={buttonClass({ variant: "ghost", size: "sm" })}

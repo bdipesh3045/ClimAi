@@ -28,7 +28,8 @@ export type ExpertData = {
   day: number;
   stages: Array<ExpertStage & { fromDay: number; toDay: number }>;
   alerts: ExpertAlert[];
-  reaction: { text: string; source: "ai" | "general" } | null;
+  /** The expert's reaction to one entry; `entryId` says which. */
+  reaction: { entryId: string; text: string; source: "ai" | "general" } | null;
   basedOn: string[];
   warnings: string[];
   generatedAt: string | null;
@@ -52,7 +53,7 @@ function sampleExpert(journey: Journey): ExpertData {
       toDay: ranges[s.stage]?.toDay ?? journey.seasonDays,
     })),
     alerts: [],
-    reaction: latest ? { text: mockExpertReaction(latest.type, journey.crop), source: "general" } : null,
+    reaction: latest ? { entryId: latest.id, text: mockExpertReaction(latest.type, journey.crop), source: "general" } : null,
     basedOn: ["Sample playbook"],
     warnings: [],
     generatedAt: null,

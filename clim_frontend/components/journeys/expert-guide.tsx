@@ -306,12 +306,17 @@ function ExpertBody({
 
         {/* Expert notes */}
         <div className="flex min-w-0 flex-col gap-4">
-          {latest && data.reaction && (
-            <div className="rounded-[12px] border border-line p-4">
+          {latest && (
+            <div className="rounded-[12px] border border-line p-4" aria-live="polite">
               <p className="text-[13px] font-semibold text-ink-soft">
                 On your last entry · {ACTION_LABELS[latest.type]}, {formatDate(latest.date)}
               </p>
-              <p className="mt-1.5 text-[14px] leading-[1.55] text-ink">{data.reaction.text}</p>
+              {/* Only show a reaction written for this entry; a new entry waits for its own. */}
+              {data.reaction && data.reaction.entryId === latest.id ? (
+                <p className="mt-1.5 text-[14px] leading-[1.55] text-ink">{data.reaction.text}</p>
+              ) : (
+                <p className="mt-1.5 text-[13.5px] text-ink-mute">Your expert is reading this entry…</p>
+              )}
             </div>
           )}
           <div className="rounded-[12px] border border-line p-4">

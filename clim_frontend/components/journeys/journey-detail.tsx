@@ -76,7 +76,7 @@ function JourneyView({ journey }: { journey: Journey }) {
 
       {syncError && (
         <div role="alert" className="flex items-start justify-between gap-3 rounded-[12px] border border-clay/30 bg-clay-tint px-4 py-3 text-[14px] text-clay-ink">
-          <span>{syncError} The change was undone.</span>
+          <span>{syncError}</span>
           <button type="button" onClick={clearSyncError} aria-label="Dismiss" className="shrink-0 text-clay-ink/70 hover:text-clay-ink">
             <X size={16} aria-hidden="true" />
           </button>

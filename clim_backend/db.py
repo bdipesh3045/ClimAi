@@ -70,6 +70,12 @@ CREATE TABLE IF NOT EXISTS journey_steps (
     done_at     TEXT NOT NULL,
     PRIMARY KEY (journey_id, step_id)
 );
+CREATE TABLE IF NOT EXISTS journey_photos (
+    entry_id    INTEGER PRIMARY KEY REFERENCES journey_entries(id) ON DELETE CASCADE,
+    media_type  TEXT NOT NULL CHECK (media_type IN ('image/jpeg', 'image/png')),
+    data        BLOB NOT NULL,
+    created_at  TEXT NOT NULL
+);
 CREATE TABLE IF NOT EXISTS journey_guides (
     journey_id  INTEGER PRIMARY KEY REFERENCES journeys(id) ON DELETE CASCADE,
     content     TEXT NOT NULL,   -- validated playbook JSON

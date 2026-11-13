@@ -110,3 +110,57 @@ class JourneyTest(AccountsTestCase):
         entry = {"date": TODAY.isoformat(), "type": "note", "details": "Not mine."}
         self.assertEqual(other.post(f"/api/journeys/{journey_id}/entries", json=entry).status_code, 404)
         self.assertEqual(other.put(f"/api/journeys/{journey_id}/steps/soy-weeds", json={"done": True}).status_code, 404)
+
+
+PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
+JPEG = b"\xff\xd8\xff\xe0" + b"\x00" * 64
+
+
+class JourneyPhotoTest(AccountsTestCase):
+    def setUp(self):
+        super().setUp()
+        self.signup()
+        body = {"crop": "Soybeans", "sownOn": SOWN, "location": "Baton Rouge"}
+        self.journey_id = self.client.post("/api/journeys", json=body).get_json()["journey"]["id"]
+        entry = {"date": TODAY.isoformat(), "type": "photo", "details": "Leaf check."}
+        entry_id = self.client.post(f"/api/journeys/{self.journey_id}/entries", json=entry).get_json()["entry"]["id"]
+        self.url = f"/api/journeys/{self.journey_id}/entries/{entry_id[1:]}/photo"
+
+    def upload(self, data, client=None, name="leaf.jpg"):
+        import io
+        return (client or self.client).put(self.url, data={"image": (io.BytesIO(data), name)},
+                                           content_type="multipart/form-data")
+
+    def test_upload_then_download(self):
+        self.assertEqual(self.upload(JPEG).status_code, 200)
+        photo = self.client.get(self.url)
+        self.assertEqual(photo.status_code, 200)
+        self.assertEqual(photo.mimetype, "image/jpeg")
+        self.assertEqual(photo.data, JPEG)
+        entries = self.client.get("/api/journeys").get_json()["journeys"][0]["entries"]
+        self.assertTrue(entries[-1]["hasPhoto"])
+        self.assertNotIn("hasPhoto", entries[0])  # the sowing entry has no photo
+
+    def test_replacing_a_photo_keeps_one(self):
+        self.upload(JPEG)
+        self.upload(PNG, name="leaf.png")
+        self.assertEqual(self.client.get(self.url).mimetype, "image/png")
+        self.assertEqual(self.query("SELECT COUNT(*) FROM journey_photos")[0][0], 1)
+
+    def test_rejects_non_images_and_oversized_photos(self):
+        self.assertEqual(self.upload(b"GIF89a not allowed", name="x.gif").status_code, 415)
+        self.assertEqual(self.upload(b"").status_code, 400)
+        self.assertEqual(self.upload(JPEG + b"\x00" * (4 * 1024 * 1024)).status_code, 413)
+
+    def test_json_routes_keep_the_small_body_limit(self):
+        big = {"date": TODAY.isoformat(), "type": "note", "details": "x" * 200_000}
+        self.assertEqual(self.client.post(f"/api/journeys/{self.journey_id}/entries", json=big).status_code, 413)
+
+    def test_only_the_owner_can_upload_or_see(self):
+        self.upload(JPEG)
+        other = app.test_client()
+        other.post("/api/auth/signup", json={"email": "other@example.com", "password": "another-password-123"})
+        self.assertEqual(other.get(self.url).status_code, 404)
+        self.assertEqual(self.upload(PNG, client=other).status_code, 404)
+        self.assertEqual(app.test_client().get(self.url).status_code, 401)
+        self.assertEqual(self.client.get(self.url.replace("/photo", "9/photo")).status_code, 404)

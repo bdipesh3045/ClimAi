@@ -9,7 +9,7 @@ import re
 import time
 from datetime import date
 
-from flask import Blueprint, current_app, jsonify, request
+from flask import Blueprint, Response, current_app, jsonify, request
 
 from accounts import SIGN_IN_MESSAGE, error, json_body, load_profile, now_iso, signed_in_user
 from db import get_db
@@ -75,13 +75,18 @@ def _owned_journey(journey_id, user_id):
 
 
 def _entry_json(row):
-    return {"id": f"e{row['id']}", "date": row["entry_date"], "type": row["action"], "details": row["details"]}
+    entry = {"id": f"e{row['id']}", "date": row["entry_date"], "type": row["action"], "details": row["details"]}
+    if "has_photo" in row.keys() and row["has_photo"]:
+        entry["hasPhoto"] = True
+    return entry
 
 
 def _journey_json(row):
     db = get_db()
     entries = db.execute(
-        "SELECT * FROM journey_entries WHERE journey_id = ? ORDER BY id", (row["id"],)
+        "SELECT e.*, p.entry_id IS NOT NULL AS has_photo FROM journey_entries e "
+        "LEFT JOIN journey_photos p ON p.entry_id = e.id WHERE e.journey_id = ? ORDER BY e.id",
+        (row["id"],),
     ).fetchall()
     steps = db.execute("SELECT step_id FROM journey_steps WHERE journey_id = ? ORDER BY step_id", (row["id"],)).fetchall()
     return {
@@ -206,6 +211,81 @@ def set_step(journey_id, step_id):
         else:
             db.execute("DELETE FROM journey_steps WHERE journey_id = ? AND step_id = ?", (journey_id, step_id))
     return jsonify({"id": step_id, "done": payload["done"]}), 200
+
+
+# --------------------------------------------------------------- entry photos
+
+MAX_PHOTO_BYTES = 4 * 1024 * 1024  # the browser shrinks photos to about 1280 px first, so real ones are far smaller
+MAX_PHOTOS_PER_JOURNEY = 200
+
+
+def _image_type(data):
+    """The real image type from the first bytes, never from the file name or claimed type."""
+    if data.startswith(b"\xff\xd8\xff"):
+        return "image/jpeg"
+    if data.startswith(b"\x89PNG\r\n\x1a\n"):
+        return "image/png"
+    return None
+
+
+def _owned_entry(journey_id, entry_id, user_id):
+    return get_db().execute(
+        "SELECT e.id FROM journey_entries e JOIN journeys j ON j.id = e.journey_id "
+        "WHERE e.id = ? AND e.journey_id = ? AND j.user_id = ?",
+        (entry_id, journey_id, user_id),
+    ).fetchone()
+
+
+@bp.put("/journeys/<int:journey_id>/entries/<int:entry_id>/photo")
+def upload_entry_photo(journey_id, entry_id):
+    user, failure = _require_user()
+    if failure:
+        return failure
+    if _owned_entry(journey_id, entry_id, user["id"]) is None:
+        return error("That entry does not exist.", 404)
+    request.max_content_length = MAX_PHOTO_BYTES + 64 * 1024  # only this route accepts photos
+    file = request.files.get("image")
+    if file is None:
+        return error("Send the photo as a form upload named image.", 400)
+    data = file.read(MAX_PHOTO_BYTES + 1)
+    if not data:
+        return error("Choose a photo.", 400)
+    if len(data) > MAX_PHOTO_BYTES:
+        return error("The photo is too large. Use a photo under 4 MB.", 413)
+    media_type = _image_type(data)
+    if media_type is None:
+        return error("Use a JPG or PNG photo.", 415)
+    db = get_db()
+    count = db.execute(
+        "SELECT COUNT(*) FROM journey_photos p JOIN journey_entries e ON e.id = p.entry_id WHERE e.journey_id = ?",
+        (journey_id,),
+    ).fetchone()[0]
+    if count >= MAX_PHOTOS_PER_JOURNEY:
+        return error(f"A journey can hold up to {MAX_PHOTOS_PER_JOURNEY} photos.", 409)
+    with db:
+        db.execute(
+            "INSERT INTO journey_photos (entry_id, media_type, data, created_at) VALUES (?, ?, ?, ?) "
+            "ON CONFLICT (entry_id) DO UPDATE SET media_type = excluded.media_type, data = excluded.data, "
+            "created_at = excluded.created_at",
+            (entry_id, media_type, data, now_iso()),
+        )
+    return jsonify({"id": f"e{entry_id}", "hasPhoto": True}), 200
+
+
+@bp.get("/journeys/<int:journey_id>/entries/<int:entry_id>/photo")
+def entry_photo(journey_id, entry_id):
+    user, failure = _require_user()
+    if failure:
+        return failure
+    if _owned_entry(journey_id, entry_id, user["id"]) is None:
+        return error("That photo does not exist.", 404)
+    row = get_db().execute("SELECT media_type, data FROM journey_photos WHERE entry_id = ?", (entry_id,)).fetchone()
+    if row is None:
+        return error("That photo does not exist.", 404)
+    response = Response(row["data"], mimetype=row["media_type"])
+    response.headers["Cache-Control"] = "private, max-age=86400"
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    return response
 
 
 # --------------------------------------------------------------- crop expert
