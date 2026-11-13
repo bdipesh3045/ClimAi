@@ -164,3 +164,30 @@ class JourneyPhotoTest(AccountsTestCase):
         self.assertEqual(self.upload(PNG, client=other).status_code, 404)
         self.assertEqual(app.test_client().get(self.url).status_code, 401)
         self.assertEqual(self.client.get(self.url.replace("/photo", "9/photo")).status_code, 404)
+
+
+class DeleteJourneyTest(JourneyPhotoTest):
+    """Reuses the photo test setup: a journey with a sowing entry, a photo entry and its photo."""
+
+    def test_delete_removes_everything_under_the_journey(self):
+        self.upload(JPEG)
+        self.client.put(f"/api/journeys/{self.journey_id}/steps/soy-weeds", json={"done": True})
+        with app.app_context():
+            from db import get_db
+            db = get_db()
+            db.execute("INSERT INTO journey_guides (journey_id, content, source, model, created_at) "
+                       "VALUES (?, '[]', 'ai', 'm', 'now')", (int(self.journey_id),))
+            db.commit()
+        self.assertEqual(self.client.delete(f"/api/journeys/{self.journey_id}").status_code, 204)
+        for table in ("journeys", "journey_entries", "journey_steps", "journey_photos", "journey_guides"):
+            with self.subTest(table=table):
+                self.assertEqual(self.query(f"SELECT COUNT(*) FROM {table}")[0][0], 0)
+        self.assertEqual(self.client.get("/api/journeys").get_json()["journeys"], [])
+        self.assertEqual(self.client.delete(f"/api/journeys/{self.journey_id}").status_code, 404)
+
+    def test_only_the_owner_can_delete(self):
+        other = app.test_client()
+        other.post("/api/auth/signup", json={"email": "other@example.com", "password": "another-password-123"})
+        self.assertEqual(other.delete(f"/api/journeys/{self.journey_id}").status_code, 404)
+        self.assertEqual(app.test_client().delete(f"/api/journeys/{self.journey_id}").status_code, 401)
+        self.assertEqual(self.query("SELECT COUNT(*) FROM journeys")[0][0], 1)

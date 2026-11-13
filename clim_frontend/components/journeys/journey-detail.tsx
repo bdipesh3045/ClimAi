@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ArrowLeft, CalendarClock, Camera, ClipboardList, Plus, Route, Sprout } from "lucide-react";
+import { useRouter } from "next/navigation";
+import { ArrowLeft, CalendarClock, Camera, ClipboardList, Plus, Route, Sprout, Trash2 } from "lucide-react";
 import { Panel, PanelHead, Pill, Skeleton, Spec, SpecGrid, StateBlock, buttonClass } from "@/components/shared/ui-kit";
 import { X } from "lucide-react";
 import { useJourneys } from "@/components/journeys/journey-store";
@@ -26,6 +27,8 @@ import { mockNextAction } from "@/lib/journeys-mock";
 
 export function JourneyDetail({ id }: { id: string }) {
   const { journeys } = useJourneys();
+  // Set while a deleted journey's page navigates away, so it never flashes "not found".
+  const [leaving, setLeaving] = useState(false);
 
   if (journeys === null) {
     return (
@@ -38,6 +41,7 @@ export function JourneyDetail({ id }: { id: string }) {
   }
 
   const journey = journeys.find((item) => item.id === id);
+  if (!journey && leaving) return <Skeleton className="h-[170px]" aria-hidden="true" />;
   if (!journey) {
     return (
       <StateBlock
@@ -55,10 +59,10 @@ export function JourneyDetail({ id }: { id: string }) {
     );
   }
 
-  return <JourneyView journey={journey} />;
+  return <JourneyView journey={journey} onLeaving={setLeaving} />;
 }
 
-function JourneyView({ journey }: { journey: Journey }) {
+function JourneyView({ journey, onLeaving }: { journey: Journey; onLeaving: (leaving: boolean) => void }) {
   const [adding, setAdding] = useState(false);
   const { syncError, clearSyncError } = useJourneys();
   const day = daysSinceSowing(journey);
@@ -69,10 +73,7 @@ function JourneyView({ journey }: { journey: Journey }) {
 
   return (
     <div className="flex flex-col gap-6">
-      <Link href="/journeys" className="inline-flex w-fit items-center gap-1.5 text-[14px] font-semibold text-forest hover:underline">
-        <ArrowLeft size={15} aria-hidden="true" />
-        My journeys
-      </Link>
+      <DeleteJourney journey={journey} onLeaving={onLeaving} />
 
       {syncError && (
         <div role="alert" className="flex items-start justify-between gap-3 rounded-[12px] border border-clay/30 bg-clay-tint px-4 py-3 text-[14px] text-clay-ink">
@@ -168,6 +169,93 @@ function JourneyView({ journey }: { journey: Journey }) {
           <HealthPanel journey={journey} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** The "My journeys" link, plus Delete with an inline confirmation that says what will be lost. */
+function DeleteJourney({ journey, onLeaving }: { journey: Journey; onLeaving: (leaving: boolean) => void }) {
+  const { deleteJourney } = useJourneys();
+  const router = useRouter();
+  const [confirming, setConfirming] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [error, setError] = useState("");
+  const photos = journey.entries.filter((e) => e.photoUrl).length;
+
+  async function confirm() {
+    setDeleting(true);
+    setError("");
+    onLeaving(true);
+    try {
+      await deleteJourney(journey.id);
+      router.replace("/journeys");
+    } catch (failure) {
+      onLeaving(false);
+      setDeleting(false);
+      setError(failure instanceof Error && failure.message ? failure.message : "The journey could not be deleted.");
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3">
+      <div className="flex items-center justify-between gap-3">
+        <Link href="/journeys" className="inline-flex w-fit items-center gap-1.5 text-[14px] font-semibold text-forest hover:underline">
+          <ArrowLeft size={15} aria-hidden="true" />
+          My journeys
+        </Link>
+        {!confirming && (
+          <button
+            type="button"
+            onClick={() => setConfirming(true)}
+            className={buttonClass({ variant: "ghost", size: "sm", className: "text-clay hover:bg-clay-tint hover:text-clay-ink" })}
+          >
+            <Trash2 size={15} aria-hidden="true" />
+            {journey.sample ? "Remove sample" : "Delete journey"}
+          </button>
+        )}
+      </div>
+      {confirming && (
+        <div
+          role="alertdialog"
+          aria-labelledby="delete-title"
+          aria-describedby="delete-detail"
+          className="flex flex-col gap-3 rounded-[12px] border border-clay/30 bg-clay-tint px-4 py-3.5 sm:flex-row sm:items-center sm:justify-between"
+        >
+          <div>
+            <p id="delete-title" className="text-[14.5px] font-semibold text-clay-ink">
+              {journey.sample ? "Remove this sample journey?" : `Delete your ${journey.crop.toLowerCase()} journey?`}
+            </p>
+            <p id="delete-detail" className="mt-0.5 text-[13.5px] leading-[1.5] text-clay-ink/90">
+              {journey.sample
+                ? "It comes back when you refresh the page."
+                : `Its ${journey.entries.length} timeline entr${journey.entries.length === 1 ? "y" : "ies"}${photos ? `, ${photos} photo${photos === 1 ? "" : "s"}` : ""}, ticked steps and expert advice are removed for good.`}
+            </p>
+            {error && <p className="mt-1 text-[13px] font-semibold text-clay">{error}</p>}
+          </div>
+          <div className="flex shrink-0 gap-2">
+            <button
+              type="button"
+              onClick={() => void confirm()}
+              disabled={deleting}
+              autoFocus
+              className={buttonClass({ variant: "danger", size: "sm" })}
+            >
+              {deleting ? "Deleting…" : journey.sample ? "Remove" : "Delete journey"}
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setConfirming(false);
+                setError("");
+              }}
+              disabled={deleting}
+              className={buttonClass({ variant: "secondary", size: "sm" })}
+            >
+              Keep it
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -155,6 +155,21 @@ def create_journey():
     return jsonify({"journey": _journey_json(_owned_journey(cursor.lastrowid, user["id"]))}), 201
 
 
+@bp.delete("/journeys/<int:journey_id>")
+def delete_journey(journey_id):
+    """Delete a journey with everything under it: entries, photos, ticked steps and the stored
+    expert playbook (all removed by ON DELETE CASCADE)."""
+    user, failure = _require_user()
+    if failure:
+        return failure
+    db = get_db()
+    with db:
+        cursor = db.execute("DELETE FROM journeys WHERE id = ? AND user_id = ?", (journey_id, user["id"]))
+    if cursor.rowcount == 0:
+        return error("That journey does not exist.", 404)
+    return "", 204
+
+
 @bp.post("/journeys/<int:journey_id>/entries")
 def add_entry(journey_id):
     user, failure = _require_user()

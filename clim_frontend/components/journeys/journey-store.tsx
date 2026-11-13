@@ -31,6 +31,8 @@ type JourneyStore = {
     location: string;
     coordinates?: { lat: number; lon: number } | null;
   }) => Promise<string>;
+  /** Deletes a saved journey on the server, or hides a sample until the next refresh. Throws on failure. */
+  deleteJourney: (journeyId: string) => Promise<void>;
   /** Expert-guide steps marked done, per journey. */
   doneSteps: Record<string, string[]>;
   setStepDone: (journeyId: string, stepId: string, done: boolean) => void;
@@ -201,12 +203,29 @@ export function JourneyProvider({ children }: { children: React.ReactNode }) {
     [handleFailure],
   );
 
+  const deleteJourney = useCallback<JourneyStore["deleteJourney"]>(
+    async (journeyId) => {
+      if (isSaved(journeyId)) {
+        try {
+          await apiFetch(`/journeys/${journeyId}`, { method: "DELETE" });
+        } catch (error) {
+          if (error instanceof ApiError && error.status === 401) expireSession();
+          // Already gone on the server (for example deleted in another tab): drop it here too.
+          if (!(error instanceof ApiError && error.status === 404)) throw error;
+        }
+      }
+      setJourneys((current) => current?.filter((j) => j.id !== journeyId) ?? current);
+      setDoneSteps(({ [journeyId]: _removed, ...rest }) => rest);
+    },
+    [expireSession],
+  );
+
   const retryLoad = useCallback(() => setAttempt((n) => n + 1), []);
   const clearSyncError = useCallback(() => setSyncError(null), []);
 
   const value = useMemo(
-    () => ({ journeys, loadError, retryLoad, syncError, clearSyncError, addEntry, addJourney, doneSteps, setStepDone }),
-    [journeys, loadError, retryLoad, syncError, clearSyncError, addEntry, addJourney, doneSteps, setStepDone],
+    () => ({ journeys, loadError, retryLoad, syncError, clearSyncError, addEntry, addJourney, deleteJourney, doneSteps, setStepDone }),
+    [journeys, loadError, retryLoad, syncError, clearSyncError, addEntry, addJourney, deleteJourney, doneSteps, setStepDone],
   );
   return <JourneyContext.Provider value={value}>{children}</JourneyContext.Provider>;
 }

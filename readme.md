@@ -228,6 +228,7 @@ The browser calls `/backend/*` on the Next.js site, and `next.config.mjs` forwar
 | GET | `/api/journeys/crops` | none | `200 {"crops": [{"name", "category", "seasonDays"}]}`, the 30 crops in `crops.json` |
 | GET | `/api/journeys` | none | `200 {"journeys": [...]}`, newest first, each with `entries` and `doneSteps` |
 | POST | `/api/journeys` | `{"crop" (any name from /api/journeys/crops), "sownOn", "location"}` | `201 {"journey"}`, with its sowing entry |
+| DELETE | `/api/journeys/<id>` | none | `204`; also removes the journey's entries, photos, ticked steps and stored expert advice (`404` for another farmer's journey) |
 | POST | `/api/journeys/<id>/entries` | `{"date", "type", "details"}` | `201 {"entry"}` (`404` for another farmer's journey) |
 | PUT | `/api/journeys/<id>/entries/<entry_id>/photo` | form upload `image` (JPEG or PNG, ≤ 4 MB) | `200 {"id", "hasPhoto": true}`; replaces any earlier photo. `GET` on the same path returns the image to its owner only |
 | PUT | `/api/journeys/<id>/steps/<step_id>` | `{"done": true}` | `200 {"id", "done"}` |
