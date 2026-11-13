@@ -1,27 +1,32 @@
 import { Analytics } from '@vercel/analytics/next'
 import type { Metadata, Viewport } from 'next'
-import { Archivo, JetBrains_Mono, Public_Sans } from 'next/font/google'
+import { Fraunces, Instrument_Sans, Martian_Mono } from 'next/font/google'
 import { AppShell } from '@/components/layout/app-shell'
 import 'leaflet/dist/leaflet.css'
 import './globals.css'
 
-const publicSans = Public_Sans({
+// A light editorial serif for headlines and figures, a compact grotesk for everything a farmer reads or taps.
+
+// Interface and reading text: crisp and compact, so dense tables and labels still breathe.
+const instrumentSans = Instrument_Sans({
   subsets: ['latin'],
-  variable: '--font-public-sans',
+  variable: '--font-instrument-sans',
   display: 'swap',
 })
 
-const archivo = Archivo({
+// Display: Fraunces with its soft and "wonky" axes off reads as a sharp, light editorial serif, like Canela.
+const fraunces = Fraunces({
+  subsets: ['latin'],
+  axes: ['opsz', 'SOFT', 'WONK'],
+  variable: '--font-fraunces',
+  display: 'swap',
+})
+
+// Coordinates and codes, narrowed a step so they sit beside the grotesk.
+const martianMono = Martian_Mono({
   subsets: ['latin'],
   axes: ['wdth'],
-  variable: '--font-archivo',
-  display: 'swap',
-})
-
-const jetbrainsMono = JetBrains_Mono({
-  subsets: ['latin'],
-  weight: ['400', '500'],
-  variable: '--font-jetbrains-mono',
+  variable: '--font-martian-mono',
   display: 'swap',
 })
 
@@ -57,7 +62,7 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en" className={`${publicSans.variable} ${archivo.variable} ${jetbrainsMono.variable}`}>
+    <html lang="en" className={`${instrumentSans.variable} ${fraunces.variable} ${martianMono.variable}`}>
       <body className="antialiased">
         <AppShell>{children}</AppShell>
         {process.env.NODE_ENV === 'production' && <Analytics />}

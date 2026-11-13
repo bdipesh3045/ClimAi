@@ -40,9 +40,10 @@
   --color-clay-tint: #f8e4dd;
   --color-clay-ink: #7d3322;
 
-  --font-sans: var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-heading: var(--font-archivo), var(--font-public-sans), ui-sans-serif, system-ui, sans-serif;
-  --font-mono: var(--font-jetbrains-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-sans: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-heading: var(--font-instrument-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-serif: var(--font-fraunces), Georgia, serif;
+  --font-mono: var(--font-martian-mono), ui-monospace, SFMono-Regular, Menlo, monospace;
 
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
@@ -244,17 +245,23 @@
 }
 
 @layer components {
-  /* Wide, heavy Archivo: crop names, page titles, figures that matter. */
+  /* Fraunces, tuned toward Canela: crop names, page titles, figures that matter.
+     Light, sharp (SOFT 0, WONK 0) and optically sized, so big titles gain contrast. */
   .font-display {
-    font-family: var(--font-heading);
-    font-stretch: 118%;
-    font-weight: 800;
+    font-family: var(--font-serif);
+    font-weight: 380;
+    font-optical-sizing: auto;
+    font-variation-settings: "SOFT" 0, "WONK" 0;
     letter-spacing: -0.02em;
   }
 
-  /* Figures line up in columns; this is a data product. */
+  /* Martian Mono is wide by default; one step narrower keeps coordinates compact. */
+  .font-mono {
+    font-stretch: 87.5%;
+  }
+
   .tabular {
-    font-variant-numeric: tabular-nums;
+    font-variant-numeric: lining-nums tabular-nums;
   }
 
   .skeleton {

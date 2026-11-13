@@ -403,7 +403,7 @@ export function SowChart({
   return (
     <figure className={cn("min-w-0", className)}>
       <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
-        <figcaption className="font-display text-[13px] tracking-[0.04em] text-ink uppercase">
+        <figcaption className="font-heading text-[12.5px] font-bold tracking-[0.06em] text-ink uppercase">
           {title}
         </figcaption>
         <ul className="flex flex-wrap gap-x-4 gap-y-1 text-[12.5px] text-ink-mute">
